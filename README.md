@@ -106,7 +106,8 @@
 - Сохранение и загрузка.
 
 Ответы на технические вопросы из §7 GDD (архитектура, механика «неожиданной волны», блокировка UI рангами,
-нестандартные механики) — в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+нестандартные механики) — в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Как добавлять постройки, существ,
+задачи и диалоги — в [docs/EXTENDING.md](docs/EXTENDING.md), план развития — в [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Структура
 

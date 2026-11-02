@@ -65,7 +65,28 @@ namespace Echo7
                 load = SaveSystem.Parse(_pendingLoadJson);
                 _pendingLoadJson = null;
             }
-            Build(load);
+            try
+            {
+                Build(load);
+            }
+            catch (System.Exception e)
+            {
+                // показываем причину прямо на экране, чтобы не искать её в консоли
+                _bootError = e.GetType().Name + ": " + e.Message;
+                Debug.LogException(e);
+            }
+        }
+
+        string _bootError;
+
+        void OnGUI()
+        {
+            if (_bootError == null) return;
+            var st = new GUIStyle(GUI.skin.label) { fontSize = 18, wordWrap = true };
+            st.normal.textColor = new Color(1f, 0.45f, 0.35f);
+            GUI.Box(new Rect(20, 20, Screen.width - 40, 160), GUIContent.none);
+            GUI.Label(new Rect(36, 30, Screen.width - 72, 150),
+                "Эхо-7: ошибка при запуске.\n" + _bootError + "\n\nПодробности (стек вызовов) — в окне Console. Пришлите эту строку, чтобы быстро исправить.", st);
         }
 
         T Child<T>(string name) where T : Component
