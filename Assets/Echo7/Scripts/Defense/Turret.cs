@@ -258,6 +258,14 @@ namespace Echo7
         const float TriggerRadius = 1.9f;
 
         public override bool NeedsService => base.NeedsService || !Armed;
+        // по мине можно пройти: враги наступают на неё, а не пытаются её «прогрызть»
+        public override bool PassableForEnemies => true;
+        public override bool PassableForFriendly => true;
+
+        protected override void OnCreated()
+        {
+            if (Collider != null) Collider.isTrigger = true;
+        }
 
         protected override void OnBuilt()
         {
