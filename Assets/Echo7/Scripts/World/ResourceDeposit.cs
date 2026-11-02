@@ -237,6 +237,15 @@ namespace Echo7
                 ResourceDeposit.Create(parent, p, type, 180 + rnd.Next(120), false, true);
             }
             Game.Log?.Alert("Завал подорван! Богатые жилы открыты, но грохот слышен на всю саванну.");
+            // синтетическая угроза: взрыв мог разбудить законсервированный завод ИИ
+            if (!Game.Entry.HasFlag("ai_factory_active") && (Index == 0 || rnd.NextDouble() < 0.4))
+            {
+                Game.Entry.SetFlag("ai_factory_active");
+                Game.Log?.Alert("В глубине пещеры ожил законсервированный завод ИИ! Теперь в волнах будут синт-стражи — пули их почти не берут.");
+                var dir = transform.position - (Game.Reactor != null ? Game.Reactor.transform.position : Game.World.Center);
+                dir.y = 0;
+                Game.Onslaught?.Schedule(WaveTrigger.Scripted, 18 + Game.Clock.Day * 3, 25f, "Синт-патруль", dir.normalized);
+            }
             GameEvents.Cave(this);
         }
     }

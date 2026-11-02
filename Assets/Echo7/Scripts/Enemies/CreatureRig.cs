@@ -34,6 +34,7 @@ namespace Echo7
                 case EnemyKind.Spitter: rig.BuildSpitter(mb); break;
                 case EnemyKind.Tank: rig.BuildTank(mb); break;
                 case EnemyKind.Grazer: rig.BuildGrazer(mb); break;
+                case EnemyKind.Synth: rig.BuildSynth(mb); break;
                 default: rig.BuildStalker(mb); break;
             }
             root.localScale = Vector3.one * size;
@@ -156,6 +157,25 @@ namespace Echo7
                 float side = i % 2 == 0 ? -1f : 1f;
                 float z = i < 2 ? 0.45f : -0.55f;
                 AddLeg(mb, _body, new Vector3(side * 0.7f, -0.25f, z), 0.4f, 0.4f, 0.28f, plate, side * 15f, i * 1.57f, 18f, 25f);
+            }
+        }
+
+        void BuildSynth(ModelBuilder mb)
+        {
+            var hull = Palette.HullDark;
+            var eye = Glow("eye_synth", new Color(1f, 0.1f, 0.05f));
+            _body = mb.Group("body", new Vector3(0, 0.9f, 0));
+            mb.Box(Vector3.zero, new Vector3(0.8f, 0.45f, 1.0f), hull, 0.1f, _body);
+            mb.Box(new Vector3(0, 0.3f, -0.1f), new Vector3(0.55f, 0.2f, 0.6f), Palette.Metal, 0.06f, _body);
+            mb.Strip(new Vector3(0, 0.05f, 0.51f), new Vector3(0.6f, 0.05f, 0.03f), Palette.Red, _body);
+            _head = mb.Group("head", new Vector3(0, 0.2f, 0.55f), _body);
+            mb.Box(Vector3.zero, new Vector3(0.4f, 0.3f, 0.35f), hull, 0.06f, _head);
+            mb.Sphere(new Vector3(0, 0.02f, 0.18f), new Vector3(0.18f, 0.12f, 0.06f), eye, _head);
+            mb.Cyl(new Vector3(0.12f, 0.35f, -0.05f), 0.02f, 0.5f, Palette.Metal, _head, null, 6);
+            for (int i = 0; i < 4; i++)
+            {
+                float side = i % 2 == 0 ? -1f : 1f;
+                AddLeg(mb, _body, new Vector3(side * 0.42f, -0.1f, i < 2 ? 0.35f : -0.35f), 0.45f, 0.5f, 0.09f, Palette.Metal, side * 35f, i * 1.57f, 28f, 70f);
             }
         }
 

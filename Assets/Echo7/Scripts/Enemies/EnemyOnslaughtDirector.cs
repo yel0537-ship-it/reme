@@ -181,6 +181,7 @@ namespace Echo7
             foreach (var a in EnemyArchetype.All)
             {
                 if (a.Fauna || day < a.MinDay || rank < a.MinRank) continue;
+                if (!string.IsNullOrEmpty(a.RequiredFlag) && !Game.Entry.HasFlag(a.RequiredFlag)) continue;
                 float wgt = 1f;
                 switch (a.Kind)
                 {
@@ -189,6 +190,7 @@ namespace Echo7
                     case EnemyKind.Brute: wgt = 2.5f; break;
                     case EnemyKind.Spitter: wgt = 1.6f; break;
                     case EnemyKind.Tank: wgt = 0.8f; break;
+                    case EnemyKind.Synth: wgt = 2.2f; break;
                 }
                 options.Add((a.Kind, wgt));
             }

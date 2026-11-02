@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Echo7
 {
-    public enum EnemyKind { Grazer, Stalker, Swarmer, Jumper, Brute, Spitter, Tank }
+    public enum EnemyKind { Grazer, Stalker, Swarmer, Jumper, Brute, Spitter, Tank, Synth }
 
     /// <summary>Описание типа существа. Стоимость Cost — «цена» в бюджете волны у директора.</summary>
     public class EnemyArchetype
@@ -28,6 +28,7 @@ namespace Echo7
         public int Rations;
         public bool Ranged;
         public Sfx AttackSound = Sfx.Screech;
+        public string RequiredFlag;   // например, синты — только после активации завода ИИ
 
         static Dictionary<EnemyKind, EnemyArchetype> _map;
 
@@ -59,6 +60,9 @@ namespace Echo7
             Add(new EnemyArchetype { Kind = EnemyKind.Tank, Name = "Танк", Description = "Огромная бронированная тварь. Медленно идёт прямо к реактору — концентрируйте огонь.",
                 MaxHp = 2600f, Armor = ArmorClass.Heavy, FlatArmor = 12f, Speed = 2.1f, Damage = 120f, AttackInterval = 2.5f, AttackRange = 3.6f,
                 StructureDamageMult = 2f, Size = 3.2f, Cost = 30, MinRank = Rank.Captain, MinDay = 5, Aggro = 0f, AttackSound = Sfx.Roar });
+            Add(new EnemyArchetype { Kind = EnemyKind.Synth, Name = "Синт-страж", Description = "Боевой автомат заброшенного завода ИИ. Пули почти не берут — нужны лазеры и взрывчатка.",
+                MaxHp = 220f, Armor = ArmorClass.Synthetic, FlatArmor = 5f, Speed = 4.2f, Damage = 14f, AttackInterval = 1.4f, AttackRange = 12f,
+                Size = 1.1f, Cost = 6, Ranged = true, Aggro = 12f, AttackSound = Sfx.Laser, RequiredFlag = "ai_factory_active" });
         }
     }
 }

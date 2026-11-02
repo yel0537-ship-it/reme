@@ -163,6 +163,7 @@ namespace Echo7
                     _targetStructure = Game.Reactor;
                     break;
                 case EnemyKind.Spitter:
+                case EnemyKind.Synth:
                     _targetStructure = FindStructure(pos, Archetype.AttackRange + 6f, s => s.IsBuilt && (s is Turret || s.IsTargetCore || s.Def.IsMechanism));
                     break;
             }
@@ -312,6 +313,16 @@ namespace Echo7
             if (_attackCd > 0f) return;
             _attackCd = Archetype.AttackInterval;
             Rig.Lunge();
+            if (Archetype.Kind == EnemyKind.Synth)
+            {
+                var eye = AimPoint + transform.forward * 0.4f;
+                if (h != null && Random.value < 0.75f)
+                    h.TakeDamage(new DamageInfo(Archetype.Damage * Game.Config.difficulty, DamageType.Laser, target, Faction.Hostile, gameObject));
+                Game.Fx.Line(eye, target, new Color(1f, 0.15f, 0.1f, 1f), 0.08f, 0.12f);
+                Game.Fx.Emit(FxKind.Sparks, target, 3, Vector3.up, 1f, new Color(1f, 0.3f, 0.2f));
+                Game.Sound.PlayAt(Sfx.Laser, eye, 0.35f, 0.15f, 0.15f);
+                return;
+            }
             var from = AimPoint + transform.forward * 0.5f;
             float t = Mathf.Clamp(Vector3.Distance(from, target) / 14f, 0.5f, 1.2f);
             ProjectileSystem.Instance.Fire(from, ProjectileSystem.BallisticVelocity(from, target, t, 12f), Archetype.Damage * Game.Config.difficulty,
