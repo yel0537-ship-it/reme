@@ -44,6 +44,7 @@ namespace Echo7
         public VipNpc VipActor { get; private set; }
         public int NextVisitDay { get; private set; } = 3;
         Shuttle _shuttle;
+        float _arrivedHour = -1f;
         readonly System.Random _rnd = new System.Random(77);
         int _visitCount;
 
@@ -58,6 +59,13 @@ namespace Echo7
         {
             if (!Game.Config.enableVipVisits) return;
             if (Pending != null && !Pending.Resolved && Game.Clock.TotalHours >= Pending.ResolveAtHour) Resolve(Pending);
+            // гость не дождался встречи — улетает, считая это отказом
+            if (Current != null && _arrivedHour >= 0f && Game.Clock.TotalHours - _arrivedHour > 20f)
+            {
+                Game.Log?.Center($"{Current.Title} {Current.Name} не дождался(ась) встречи с командиром и улетает.");
+                foreach (var q in Current.Requests) if (q.Choice < 0) q.Choice = 2;
+                Depart(Current);
+            }
             if (Current == null && Pending == null && Game.Clock.Day >= NextVisitDay && hour == 10) BeginVisit();
         }
 
@@ -68,6 +76,7 @@ namespace Echo7
             _visitCount++;
             var type = (VipType)(_visitCount % 3 == 1 ? 0 : _rnd.Next(3));
             Current = MakeVisit(type);
+            _arrivedHour = Game.Clock.TotalHours;
             var pad = StructureLookup.FirstOf(StructureKind.LandingPad) as LandingPad;
             var at = pad != null && pad.IsBuilt ? pad.PadPoint : Game.World.LandingZone;
             _shuttle = Shuttle.Land(at, () =>
@@ -219,6 +228,8 @@ namespace Echo7
             v.ResolveAtHour = Game.Clock.TotalHours + 24f + _rnd.Next(12);
             Pending = v;
             Current = null;
+            _arrivedHour = -1f;
+            if (VipActor == null && _shuttle != null) { _shuttle.TakeOff(); _shuttle = null; }
             if (VipActor != null) VipActor.WalkTo(_shuttle != null ? _shuttle.transform.position : Game.World.LandingZone, () =>
             {
                 if (VipActor != null) Destroy(VipActor.gameObject);
