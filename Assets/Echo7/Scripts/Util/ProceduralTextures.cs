@@ -5,6 +5,16 @@ namespace Echo7
     /// <summary>Шумы и процедурные текстуры (заглушки до появления настоящих текстур).</summary>
     public static class Noise2
     {
+        /// <summary>
+        /// smoothstep в стиле GLSL: 0 при x ≤ edge0, 1 при x ≥ edge1, плавно между ними.
+        /// (Mathf.SmoothStep в Unity — это интерполяция from→to по t, а не порог!)
+        /// </summary>
+        public static float Smooth(float edge0, float edge1, float x)
+        {
+            float t = Mathf.Clamp01((x - edge0) / (edge1 - edge0));
+            return t * t * (3f - 2f * t);
+        }
+
         /// <summary>Фрактальный шум Перлина 0..1.</summary>
         public static float Fbm(float x, float y, int octaves = 4, float lacunarity = 2f, float gain = 0.5f)
         {
@@ -74,7 +84,7 @@ namespace Echo7
                 // тайлинг: смешиваем шум по торической развёртке
                 float u = (float)x / size, v = (float)y / size;
                 float n = TileableFbm(u, v, scale, ox, oy);
-                var c = Color.Lerp(a, b, Mathf.SmoothStep(0.25f, 0.75f, n));
+                var c = Color.Lerp(a, b, Noise2.Smooth(0.25f, 0.75f, n));
                 float fine = Mathf.PerlinNoise(x * 0.35f + ox, y * 0.35f + oy);
                 c *= 0.9f + fine * 0.2f;
                 if (speck.HasValue && rnd.NextDouble() < speckDensity) c = Color.Lerp(c, speck.Value, 0.6f);

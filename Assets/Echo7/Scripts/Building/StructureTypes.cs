@@ -230,6 +230,42 @@ namespace Echo7
         }
     }
 
+    /// <summary>
+    /// Шумовой маяк — приманка («фауна как оружие» из ARCHITECTURE.md). Создаёт ложные шумовые события:
+    /// директор берёт направление волн из шума, а штурмовики поблизости атакуют маяк вместо базы.
+    /// Общую «угрозу» почти не поднимает, но через 3 минуты сгорает.
+    /// </summary>
+    public class DecoyBeacon : Structure
+    {
+        public float Life = 180f;
+        float _pulse;
+        Transform _lamp;
+
+        protected override void OnBuilt() { _lamp = Model.Find("#lamp"); }
+
+        public override string StatusText() => IsBuilt ? $"Шумит ещё {Mathf.CeilToInt(Life)} с" : base.StatusText();
+
+        protected override void Update()
+        {
+            base.Update();
+            if (!IsBuilt || IsDestroyed || !Game.IsPlaying) return;
+            Life -= Time.deltaTime;
+            if (_lamp != null) _lamp.gameObject.SetActive(Mathf.Repeat(Time.time, 0.6f) < 0.3f);
+            _pulse -= Time.deltaTime;
+            if (_pulse <= 0f)
+            {
+                _pulse = 1.5f;
+                Game.Noise?.EmitDecoy(transform.position, 6f);
+                if (Random.value < 0.3f) Game.Sound?.PlayAt(Sfx.Alarm, transform.position, 0.25f, 0.2f, 1f);
+            }
+            if (Life <= 0f)
+            {
+                Game.Log?.Info("Шумовой маяк выработал батарею.");
+                DestroyStructure();
+            }
+        }
+    }
+
     /// <summary>Посадочная площадка — точка доставок и визитов.</summary>
     public class LandingPad : Structure
     {

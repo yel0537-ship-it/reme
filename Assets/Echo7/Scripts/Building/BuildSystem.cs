@@ -15,6 +15,7 @@ namespace Echo7
         public bool IsPlacing => Selected != null;
         public string LastInvalidReason { get; private set; }
         public int CancelFrame { get; private set; } = -1;
+        public bool OutOfPower { get; private set; }
 
         readonly List<Transform> _ghosts = new List<Transform>();
         readonly List<ModelBuilder.MaterialSwap> _ghostSwaps = new List<ModelBuilder.MaterialSwap>();
@@ -153,6 +154,7 @@ namespace Echo7
             var center = g.RectCenter(r);
             var rc = Reactor != null ? Reactor.transform.position : Game.World.Center;
             float maxR = Game.Rank.BuildRadius;
+            if (def.Kind == StructureKind.DecoyBeacon) maxR += 40f;
             if (!needDeposit && Vector2.Distance(new Vector2(center.x, center.z), new Vector2(rc.x, rc.z)) > maxR)
                 return $"Вне радиуса застройки ({Mathf.RoundToInt(maxR)} м; растёт с рангом)";
             if (needDeposit && Vector2.Distance(new Vector2(center.x, center.z), new Vector2(rc.x, rc.z)) > maxR + 60f)
@@ -186,8 +188,11 @@ namespace Echo7
             if (!Game.CameraRig.MouseOnGround(out var point)) return;
             var cell = Game.Grid.WorldToCell(point);
 
-            if (Selected.PowerRadius > 0f) DrawRing(_powerRing, Game.Grid.RectCenter(FootprintAt(Selected, cell, Rotation)), Selected.PowerRadius);
+            var hoverCenter = Game.Grid.RectCenter(FootprintAt(Selected, cell, Rotation));
+            if (Selected.PowerRadius > 0f) DrawRing(_powerRing, hoverCenter, Selected.PowerRadius);
+            else if (Selected.Component == typeof(Turret)) DrawRing(_powerRing, hoverCenter, TurretProfile.For(Selected.Kind).Range);
             else _powerRing.enabled = false;
+            OutOfPower = Selected.NeedsPower && Game.Power != null && !Game.Power.Covers(hoverCenter);
 
             var cells = new List<Vector2Int>();
             if (_dragging && Selected.LinePlacement) LineCells(_dragStart, cell, cells);

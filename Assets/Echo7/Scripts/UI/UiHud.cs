@@ -184,7 +184,8 @@ namespace Echo7
             GUI.Box(r, GUIContent.none, UiSkin.Panel);
             GUI.Label(new Rect(r.x + 12, r.y + 6, 640, 22), $"<b>{d.Name}</b>  ·  {b.CostOf(d)}  ·  R — поворот  ·  ПКМ/Esc — отмена{(d.LinePlacement ? "  ·  тяните мышью для линии" : "  ·  Shift — несколько")}", UiSkin.Small);
             string why = b.LastInvalidReason;
-            GUI.Label(new Rect(r.x + 12, r.y + 32, 640, 22), why == null ? UiSkin.Col("Место подходит", UiSkin.Good) : UiSkin.Col(why, UiSkin.Bad), UiSkin.Small);
+            string ok = b.OutOfPower ? UiSkin.Col("Место подходит, но вне энергосети — поставьте энергоузел рядом", UiSkin.Accent) : UiSkin.Col("Место подходит", UiSkin.Good);
+            GUI.Label(new Rect(r.x + 12, r.y + 32, 640, 22), why == null ? ok : UiSkin.Col(why, UiSkin.Bad), UiSkin.Small);
         }
 
         /// <summary>Радар: база, постройки, враги, гарнизон в радиусе 70 м.</summary>

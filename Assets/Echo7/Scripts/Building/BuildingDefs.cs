@@ -11,7 +11,7 @@ namespace Echo7
         Reactor, Command, Fence, Wall, TitaniumWall, Gate, Pylon, Solar, Generator,
         Habitat, MedBay, Storage, Extractor, Condenser, DroneBay,
         MgTurret, LaserTurret, HeavyTurret, Mine, Sensor, SurveyProbe, ShieldProjector,
-        LandingPad, Spaceport
+        LandingPad, Spaceport, DecoyBeacon
     }
 
     /// <summary>Описание типа постройки. Все цифры баланса — здесь.</summary>
@@ -160,6 +160,10 @@ namespace Echo7
                     Description = "Геологоразведка: открывает скрытые залежи в радиусе 50 м.",
                     Cost = C((Al, 10), (Si, 2)), MaxHp = 150f, BuildTime = 6f, EnergyUse = 1f, IsSmall = true, Height = 3f,
                     RequiredFeature = Feature.GeoSurvey, Component = typeof(SurveyProbe), Model = StructureModels.SurveyProbe },
+                new BuildingDef { Kind = StructureKind.DecoyBeacon, Name = "Шумовой маяк", Category = BuildCategory.Defense,
+                    Description = "Приманка: 3 минуты громко шумит, уводя волны и фауну от базы. Ставится далеко за периметром (до +40 м).",
+                    Cost = C((Al, 8), (Cr, 1)), MaxHp = 160f, BuildTime = 4f, IsSmall = true, Height = 2.6f,
+                    Component = typeof(DecoyBeacon), Model = StructureModels.DecoyBeacon },
                 new BuildingDef { Kind = StructureKind.ShieldProjector, Name = "Генератор щита", Category = BuildCategory.Defense,
                     Description = "Уникальный чертёж. Снижает урон по постройкам в радиусе 12 м на 45%.",
                     Size = new Vector2Int(2, 2), Cost = C((Al, 30), (Cr, 10), (Ti, 8)), MaxHp = 500f, BuildTime = 18f, EnergyUse = 10f, IsMechanism = true,

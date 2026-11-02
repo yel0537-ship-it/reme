@@ -82,7 +82,7 @@ namespace Echo7
             // окраины карты выше — естественная граница
             float ex = Mathf.Abs(x - WorldSize * 0.5f) / (WorldSize * 0.5f);
             float ez = Mathf.Abs(z - WorldSize * 0.5f) / (WorldSize * 0.5f);
-            float edge = Mathf.SmoothStep(0.82f, 1f, Mathf.Max(ex, ez));
+            float edge = Noise2.Smooth(0.82f, 1f, Mathf.Max(ex, ez));
             h += edge * 12f;
             return h;
         }
@@ -103,7 +103,7 @@ namespace Echo7
                 float wz = (float)y / (res - 1) * WorldSize;
                 float h = RawHeight(wx, wz, so);
                 float d = Vector2.Distance(new Vector2(wx, wz), new Vector2(WorldSize * 0.5f, WorldSize * 0.5f));
-                float flat = 1f - Mathf.SmoothStep(BaseFlatRadius, BaseFlatRadius + 16f, d);
+                float flat = 1f - Noise2.Smooth(BaseFlatRadius, BaseFlatRadius + 16f, d);
                 h = Mathf.Lerp(h, BaseHeight + (Noise2.Fbm(wx * 0.05f, wz * 0.05f, 2) - 0.5f) * 0.25f, flat);
                 heights[y, x] = Mathf.Clamp01(h / TerrainHeight);
             }
@@ -169,12 +169,12 @@ namespace Echo7
             {
                 float u = (x + 0.5f) / n, v = (y + 0.5f) / n;
                 float wx = u * WorldSize, wz = v * WorldSize;
-                _slope[y, x] = Mathf.SmoothStep(22f, 38f, _data.GetSteepness(u, v));
+                _slope[y, x] = Noise2.Smooth(22f, 38f, _data.GetSteepness(u, v));
                 float d = Vector2.Distance(new Vector2(wx, wz), new Vector2(WorldSize * 0.5f, WorldSize * 0.5f));
-                float baseDirt = 1f - Mathf.SmoothStep(BaseFlatRadius - 14f, BaseFlatRadius + 2f, d);
+                float baseDirt = 1f - Noise2.Smooth(BaseFlatRadius - 14f, BaseFlatRadius + 2f, d);
                 float trail = 0f;
                 foreach (var tr in _trails)
-                    trail = Mathf.Max(trail, 1f - Mathf.SmoothStep(1.2f, 3.2f, DistToPolyline(new Vector2(wx, wz), tr)));
+                    trail = Mathf.Max(trail, 1f - Noise2.Smooth(1.2f, 3.2f, DistToPolyline(new Vector2(wx, wz), tr)));
                 _dirt[y, x] = Mathf.Max(baseDirt * (0.65f + 0.35f * Mathf.PerlinNoise(wx * 0.1f, wz * 0.1f)), trail * 0.85f);
                 _patch[y, x] = Noise2.Fbm(wx * 0.03f + seed, wz * 0.03f, 3);
             }
@@ -251,7 +251,7 @@ namespace Echo7
                     float dd = Vector2.Distance(new Vector2(wx, wz), new Vector2(c.x, c.z));
                     float r2 = radius * (1f + (Mathf.PerlinNoise(wx * 0.15f, wz * 0.15f) - 0.5f) * 0.35f);
                     if (dd > r2 * 1.6f) continue;
-                    float k = 1f - Mathf.SmoothStep(r2 * 0.35f, r2 * 1.5f, dd);
+                    float k = 1f - Noise2.Smooth(r2 * 0.35f, r2 * 1.5f, dd);
                     float target = (baseH - depth * k) / TerrainHeight;
                     heights[y, x] = Mathf.Min(heights[y, x], Mathf.Lerp(heights[y, x], target, Mathf.Clamp01(k * 1.4f)));
                 }
@@ -298,7 +298,7 @@ namespace Echo7
                 foreach (var l in Lakes)
                 {
                     float dd = Vector2.Distance(new Vector2(wx, wz), new Vector2(l.Center.x, l.Center.z));
-                    s = Mathf.Max(s, 1f - Mathf.SmoothStep(l.Radius * 0.9f, l.Radius * 1.6f, dd));
+                    s = Mathf.Max(s, 1f - Noise2.Smooth(l.Radius * 0.9f, l.Radius * 1.6f, dd));
                 }
                 _shore[y, x] = s;
             }

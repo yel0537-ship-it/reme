@@ -89,6 +89,17 @@ namespace Echo7
             if (amount >= 15f) ScareFauna(pos, amount);
         }
 
+        /// <summary>Ложный шум приманки: влияет на направление волн и пугает/манит фауну, но почти не растит угрозу.</summary>
+        public void EmitDecoy(Vector3 pos, float amount)
+        {
+            Level += amount * 0.05f;
+            _recent.Add(new NoiseEvent { Pos = pos, Amount = amount * 3f, Time = Time.time, Source = NoiseSource.Event });
+            // хищники идут на звук
+            foreach (var e in Registry.Enemies)
+                if (e != null && !e.IsDead && e.Wave == null && e.Archetype.Kind == EnemyKind.Stalker && (e.transform.position - pos).sqrMagnitude < 60f * 60f)
+                    e.Home = pos;
+        }
+
         /// <summary>Непрерывный шум (работа механизмов): копится без записи отдельных событий.</summary>
         public void EmitContinuous(Vector3 pos, float amount, NoiseSource src)
         {

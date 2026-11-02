@@ -345,6 +345,16 @@ namespace Echo7
             dome.gameObject.SetActive(false);
         }
 
+        public static void DecoyBeacon(ModelBuilder mb, BuildingDef def)
+        {
+            mb.Hex(new Vector3(0, 0.15f, 0), 0.6f, 0.3f, D);
+            mb.Cyl(new Vector3(0, 1.1f, 0), 0.1f, 1.8f, Palette.Metal, null, null, 8);
+            mb.Frustum(new Vector3(0, 2.0f, 0.15f), 0.12f, 0.45f, 0.5f, L, null, new Vector3(80, 0, 0), 12);
+            mb.Box(new Vector3(0, 0.6f, 0), new Vector3(0.45f, 0.5f, 0.35f), Palette.Hazard, 0.04f);
+            var lamp = mb.Group("#lamp", new Vector3(0, 2.45f, 0));
+            mb.Sphere(Vector3.zero, Vector3.one * 0.18f, O, lamp);
+        }
+
         public static void LandingPad(ModelBuilder mb, BuildingDef def)
         {
             mb.Hex(new Vector3(0, 0.2f, 0), 4.1f, 0.4f, Palette.Concrete);

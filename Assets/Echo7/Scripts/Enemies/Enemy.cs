@@ -143,6 +143,12 @@ namespace Echo7
             }
 
             if (Wave == null) return;
+            // приманка: штурмовики рядом с шумовым маяком атакуют его
+            if (_targetStructure == null && _targetUnit == null && Archetype.Kind != EnemyKind.Tank && Archetype.Kind != EnemyKind.Jumper)
+            {
+                var decoy = FindStructure(pos, 30f, s => s is DecoyBeacon && s.IsBuilt);
+                if (decoy != null) { _targetStructure = decoy; return; }
+            }
             switch (Archetype.Kind)
             {
                 case EnemyKind.Swarmer:
