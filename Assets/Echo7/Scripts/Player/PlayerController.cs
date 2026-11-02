@@ -355,7 +355,7 @@ namespace Echo7
             ProjectileSystem.Instance.Fire(muzzle, dir * 70f, 15f, DamageType.Kinetic, Faction.Player, ProjectileLook.Plasma, 0f, 0f, gameObject, null, 0.6f);
             Game.Fx.Emit(FxKind.Muzzle, muzzle, 1, null, 1f, new Color(0.5f, 0.9f, 1f));
             Game.Sound.PlayAt(Sfx.Rifle, muzzle, 0.5f, 0.06f, 0.05f);
-            Game.Noise?.Emit(transform.position, 0.8f * (Game.Skills != null ? Game.Skills.NoiseMult : 1f), NoiseSource.Player);
+            Game.Noise?.Emit(transform.position, 0.8f, NoiseSource.Player); // «Скрытность» учитывается в NoiseSystem
         }
 
         // ------------------------------------------------------------ добыча и стройка
@@ -388,7 +388,7 @@ namespace Echo7
                     Game.Ui?.FloatText(transform.position + Vector3.up * 2.2f, $"+{got} {ResourceBank.Name(type)}", ResourceBank.ColorOf(type));
                 }
                 Game.Sound.PlayAt(Sfx.Mining, transform.position, 0.6f);
-                Game.Noise?.Emit(transform.position, 1.6f * (Game.Skills != null ? Game.Skills.NoiseMult : 1f), NoiseSource.Mining);
+                Game.Noise?.Emit(transform.position, 1.6f, NoiseSource.Mining);
             }
         }
 
