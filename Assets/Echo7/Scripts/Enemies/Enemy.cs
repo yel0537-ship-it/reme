@@ -32,6 +32,10 @@ namespace Echo7
         Vector3 _vel, _wanderTarget;
         Vector3 _jumpFrom, _jumpTo;
         float _jumpT;
+        float _elev, _wantElev;   // подъём прыгуна на второй ярус (стена, настил)
+
+        /// <summary>Достаёт ли до второго яруса: прыгуны запрыгивают, стрелки бьют издалека. Остальные — только с земли.</summary>
+        public bool CanReachHigh => Archetype.Ranged || Archetype.Kind == EnemyKind.Jumper;
         Vector3 _lastPos;
         float _stuckT;
 
@@ -120,6 +124,7 @@ namespace Echo7
             }
 
             Vector3 desired = Vector3.zero;
+            _wantElev = 0f;
             if (Archetype.Fauna && Wave == null) desired = FaunaBehaviour(dt);
             else desired = AssaultBehaviour(dt);
 
@@ -133,11 +138,19 @@ namespace Echo7
             if (_targetUnit != null && (_targetUnit.IsDead || _targetUnitT == null)) { _targetUnit = null; _targetUnitT = null; }
             if (_targetStructure != null && _targetStructure.IsDestroyed) _targetStructure = null;
             var pos = transform.position;
+            // защитник забрался на стену — пехота до него не дотянется: бьёт опору под ним
+            if (_targetUnit != null && _targetUnitT != null && !CanReachHigh && Game.Grid.IsElevated(_targetUnitT.position))
+            {
+                var under = Game.Grid.StructureAt(_targetUnitT.position);
+                if (Wave != null && _targetStructure == null && under != null && under.Def.SupportsUpper) _targetStructure = under;
+                _targetUnit = null; _targetUnitT = null;
+            }
 
             // юниты рядом — нападаем (кроме танка: он идёт к реактору)
             if (Archetype.Kind != EnemyKind.Tank && Archetype.Aggro > 0f && (Wave != null || Aggressive || Archetype.Kind == EnemyKind.Stalker))
             {
                 var u = Registry.NearestFriendlyUnit(pos, Archetype.Aggro, out var t);
+                if (u != null && !CanReachHigh && Game.Grid.IsElevated(t.position)) u = null;
                 if (u != null) { _targetUnit = u; _targetUnitT = t; if (Archetype.Fauna) Aggressive = true; }
                 else if (_targetUnit != null && (_targetUnitT.position - pos).sqrMagnitude > Archetype.Aggro * Archetype.Aggro * 4f) { _targetUnit = null; _targetUnitT = null; }
             }
@@ -153,7 +166,7 @@ namespace Echo7
             {
                 case EnemyKind.Swarmer:
                     if (_targetStructure == null || (_targetStructure.CableCut && !_targetStructure.Def.IsSmall))
-                        _targetStructure = FindStructure(pos, 70f, s => s.IsBuilt && (s.Def.IsSmall || (s.Def.NeedsPower && !s.CableCut && !s.IsTargetCore)));
+                        _targetStructure = FindStructure(pos, 70f, s => s.IsBuilt && !s.IsElevated && (s.Def.IsSmall || (s.Def.NeedsPower && !s.CableCut && !s.IsTargetCore)));
                     break;
                 case EnemyKind.Jumper:
                     if (_targetStructure == null)
@@ -194,7 +207,11 @@ namespace Echo7
                 var to = _targetUnitT.position - pos; to.y = 0;
                 float range = Archetype.AttackRange + 0.4f;
                 if (Archetype.Ranged && to.magnitude <= Archetype.AttackRange) { Face(to); TryAttackUnit(); return Vector3.zero; }
-                if (to.magnitude <= range) { Face(to); TryAttackUnit(); return Vector3.zero; }
+                if (to.magnitude <= range)
+                {
+                    if (Archetype.Kind == EnemyKind.Jumper && Game.Grid.IsElevated(_targetUnitT.position)) _wantElev = WorldGrid.LevelHeight;
+                    Face(to); TryAttackUnit(); return Vector3.zero;
+                }
                 return MoveDirect(_targetUnitT.position);
             }
 
@@ -212,6 +229,7 @@ namespace Echo7
                 float d = _targetStructure.DistanceTo(pos);
                 if (d <= Archetype.AttackRange + 0.3f)
                 {
+                    if (_targetStructure.IsElevated && Archetype.Kind == EnemyKind.Jumper) _wantElev = WorldGrid.LevelHeight;
                     Face(_targetStructure.transform.position - pos);
                     AttackStructure(_targetStructure);
                     return Vector3.zero;
@@ -429,7 +447,8 @@ namespace Echo7
             }
             _vel = Vector3.Lerp(_vel, v, 1f - Mathf.Exp(-8f * dt));
             var p = transform.position + _vel * dt;
-            p.y = Game.Grid.SampleHeight(p);
+            _elev = Mathf.MoveTowards(_elev, _wantElev, dt * (_wantElev > _elev ? 9f : 6f));
+            p.y = Game.Grid.SampleHeight(p) + _elev;
             transform.position = p;
             var flat = new Vector3(_vel.x, 0, _vel.z);
             Rig.Speed = flat.magnitude;
@@ -442,7 +461,7 @@ namespace Echo7
             if (_stuckT > 2.5f && Wave != null)
             {
                 _stuckT = 0f;
-                var nearest = FindStructure(transform.position, 4f, st => !st.IsDestroyed);
+                var nearest = FindStructure(transform.position, 4f, st => !st.IsDestroyed && (CanReachHigh || !st.IsElevated));
                 if (nearest != null) _targetStructure = nearest;
             }
         }

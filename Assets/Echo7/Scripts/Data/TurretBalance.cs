@@ -80,10 +80,15 @@ namespace Echo7
         public const string File = "Turrets";
         public override string FileName => File;
 
+        [Header("Второй ярус")]
+        [Tooltip("Прибавка к дальности турели, стоящей на стене или настиле (0.15 = +15%).")]
+        [Range(0f, 1f)] public float elevatedRangeBonus = 0.15f;
+
         public List<TurretEntry> turrets = new List<TurretEntry>();
 
         public override void ResetToCode()
         {
+            elevatedRangeBonus = 0.15f;
             turrets.Clear();
             foreach (var k in TurretProfile.TurretKinds) turrets.Add(TurretEntry.From(k, TurretProfile.CodeDefault(k)));
         }
@@ -99,6 +104,7 @@ namespace Echo7
         public override void Validate(List<string> problems)
         {
             BalanceData.CheckDuplicates(turrets.ConvertAll(e => e.kind), "Турель", problems);
+            if (elevatedRangeBonus > 0.5f) problems.Add($"Бонус дальности на втором ярусе +{elevatedRangeBonus * 100f:0}% — турели на стенах станут сильнее всех остальных.");
             foreach (var e in turrets)
             {
                 string who = $"«{e.name}» ({e.kind})";

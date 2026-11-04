@@ -27,6 +27,12 @@ namespace Echo7
         public bool IsAway => State == NpcState.Away || State == NpcState.Deserting;
         public float LastTalkDay = -10f;
         public bool Refusing { get; private set; }
+        /// <summary>Пост на втором ярусе, а дойти до него нельзя (нет лестницы или настила рядом).</summary>
+        public bool NoAccess { get; private set; }
+        /// <summary>Уровень, на котором стоит боец: 0 — земля, 1 — настил второго яруса.</summary>
+        public int Level => _level;
+        int _level;
+        bool _lastReached = true;
 
         readonly List<Vector3> _path = new List<Vector3>();
         int _pathIdx;
@@ -83,7 +89,8 @@ namespace Echo7
             return n;
         }
 
-        public bool IsManning(Turret t) => Post == t && State == NpcState.Manning && t != null && t.DistanceTo(transform.position) < 2.5f;
+        public bool IsManning(Turret t) => Post == t && State == NpcState.Manning && t != null && t.DistanceTo(transform.position) < 2.5f
+                                           && (!t.IsElevated || _level == 1);
 
         public void AssignTo(Turret t)
         {
@@ -95,6 +102,7 @@ namespace Echo7
         {
             if (Post != null && Post.Crew == this) Post.Crew = null;
             Post = null;
+            NoAccess = false;
             if (State == NpcState.Manning) State = NpcState.Idle;
         }
 
@@ -104,6 +112,7 @@ namespace Echo7
             gameObject.SetActive(true);
             at.y = Game.Grid.SampleHeight(at);
             transform.position = at;
+            _level = 0;
             State = NpcState.Idle;
         }
 
@@ -189,9 +198,19 @@ namespace Echo7
                 else
                 {
                     State = NpcState.Manning;
+                    Post.Crew = this;
+                    if (Post.IsElevated)
+                    {
+                        // турель на стене: встать на настил рядом с ней (подняться по лестнице)
+                        var up = UpperSpotNear(Post, pos);
+                        if (up == null) { NoAccess = true; _path.Clear(); return; }
+                        if (_level != 1 || Post.DistanceTo(pos) > 1.8f) Goto(up.Value); else _path.Clear();
+                        NoAccess = !_lastReached && _level != 1;
+                        return;
+                    }
+                    NoAccess = false;
                     var spot = Post.ClosestPoint(pos) + (pos - Post.transform.position).normalized * 0.8f;
                     if (Post.DistanceTo(pos) > 1.8f) Goto(spot); else _path.Clear();
-                    Post.Crew = this;
                     return;
                 }
             }
@@ -254,7 +273,7 @@ namespace Echo7
             foreach (var s in Registry.Structures)
             {
                 if (s == null || s.IsDestroyed) continue;
-                bool need = !s.IsBuilt || s.Health.Fraction < 0.8f || s.NeedsService;
+                bool need = (!s.IsBuilt && s.ReadyToBuild) || (s.IsBuilt && s.Health.Fraction < 0.8f) || s.NeedsService;
                 if (!need) continue;
                 float d = (s.transform.position - p).sqrMagnitude;
                 if (d < bd) { bd = d; best = s; }
@@ -278,8 +297,27 @@ namespace Echo7
             if ((p - _goal).sqrMagnitude < 1f && _path.Count > 0 && _pathIdx < _path.Count && _repathT > 0f) return;
             _goal = p;
             _repathT = 2f;
-            Game.Garrison.Pathfinder.FindPath(transform.position, p, _path);
+            var pf = Game.Garrison.Pathfinder;
+            pf.FindPath(transform.position, p, _path);
+            _lastReached = pf.LastReached;
             _pathIdx = 0;
+        }
+
+        /// <summary>Ближайшая к бойцу клетка настила вплотную к постройке второго яруса (точка на высоте яруса).</summary>
+        static Vector3? UpperSpotNear(Structure s, Vector3 from)
+        {
+            var g = Game.Grid;
+            var r = s.Footprint;
+            Vector3? best = null; float bd = float.MaxValue;
+            for (int y = r.yMin - 1; y <= r.yMax; y++)
+            for (int x = r.xMin - 1; x <= r.xMax; x++)
+            {
+                if (!g.WalkableUpper(x, y)) continue;
+                var p = g.CellCenter(x, y) + Vector3.up * WorldGrid.LevelHeight;
+                float d = (p - from).sqrMagnitude;
+                if (d < bd) { bd = d; best = p; }
+            }
+            return best;
         }
 
         void Act(float dt)
@@ -338,7 +376,12 @@ namespace Echo7
 
             _vel = Vector3.Lerp(_vel, desired, 1f - Mathf.Exp(-10f * dt));
             var p = pos + _vel * dt;
-            p.y = Game.Grid.SampleHeight(p);
+            // уровень: на настил — только по пути с лестницы, с настила — когда он кончился под ногами
+            int pref = _path.Count > 0 && _pathIdx < _path.Count ? Game.Grid.LevelAt(_path[_pathIdx]) : _level;
+            var pc = Game.Grid.WorldToCell(p);
+            bool deck = Game.Grid.WalkableUpper(pc.x, pc.y);
+            _level = deck && (pref == 1 || _level == 1) ? 1 : 0;
+            p.y = Game.Grid.WalkHeight(p, _level);
             transform.position = p;
             Rig.Speed = new Vector3(_vel.x, 0, _vel.z).magnitude;
             Rig.Aiming = aiming;
@@ -410,7 +453,7 @@ namespace Echo7
                 if (Refusing) return "отказывается от поста";
                 switch (State)
                 {
-                    case NpcState.Manning: return Post != null ? $"расчёт: {Post.Def.Name}" : "на посту";
+                    case NpcState.Manning: return Post == null ? "на посту" : NoAccess ? $"не может подняться к «{Post.Def.Name}» — нужна лестница" : $"расчёт: {Post.Def.Name}";
                     case NpcState.Fighting: return "в бою";
                     case NpcState.Repairing: return "ремонт";
                     case NpcState.Healing: return "лечит";

@@ -56,6 +56,12 @@ Game.Dialogue.Start(node);
 ## Новый параметр баланса
 См. раздел «Для программиста» в [BALANCE](BALANCE.md): поле в записи, строки в `From`/`ApplyTo`, проверка в `Validate`.
 
+## Постройка для второго яруса
+- Чтобы постройку можно было ставить на стену или настил (клавиша Q в режиме стройки), поставьте `AllowUpper = true`.
+  Модель ничего не меняет: начало координат стоит на поверхности яруса.
+- Чтобы постройка держала ярус, поставьте `SupportsUpper = true`. Высота модели ≈ 3,2 м, верх должен совпасть с `WorldGrid.LevelHeight` (3,4 м).
+- Код, которому важен уровень, смотрит на `Structure.Level` / `IsElevated` и на `WorldGrid.StructureAt(x, y, level)`.
+
 ## Новый допуск по рангу
 1. Значение в `Feature` и строка в `FeatureRanks` ([Progression/PlayerRankManager.cs](../Assets/Echo7/Scripts/Progression/PlayerRankManager.cs)).
 2. Используйте его в `BuildingDef.RequiredFeature`, `UiManager.RequiredFeature(window)`, `GlobalRegion.RequiredFeature`

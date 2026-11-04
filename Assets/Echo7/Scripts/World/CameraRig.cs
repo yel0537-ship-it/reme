@@ -83,6 +83,24 @@ namespace Echo7
         /// <summary>Луч из камеры через курсор.</summary>
         public Ray MouseRay() => Cam.ScreenPointToRay(InputBridge.MousePosition);
 
+        /// <summary>
+        /// Точка под курсором, куда можно идти: верх достроенного настила второго яруса или земля.
+        /// </summary>
+        public bool MouseOnWalkable(out Vector3 point)
+        {
+            var ray = MouseRay();
+            if (Physics.Raycast(ray, out var hit, 800f, Layers.GroundMask | Layers.StructureMask, QueryTriggerInteraction.Ignore))
+            {
+                var deck = hit.collider.GetComponentInParent<Deck>();
+                if (deck != null && deck.IsBuilt && !deck.IsDestroyed && hit.normal.y > 0.6f)
+                {
+                    point = hit.point;
+                    return true;
+                }
+            }
+            return MouseOnGround(out point);
+        }
+
         public bool MouseOnGround(out Vector3 point)
         {
             var ray = MouseRay();

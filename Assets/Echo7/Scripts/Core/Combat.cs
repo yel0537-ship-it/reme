@@ -20,6 +20,8 @@ namespace Echo7
         public const int Npc = 12;
         public const int Deposit = 13;
         public const int Interactable = 14;
+        /// <summary>Перила второго яруса: держат игрока на настиле, но перекат перемахивает через них.</summary>
+        public const int Rail = 15;
 
         public static readonly int GroundMask = 1 << Ground;
         public static readonly int StructureMask = 1 << Structure;

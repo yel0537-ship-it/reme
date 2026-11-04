@@ -22,6 +22,7 @@ namespace Echo7
         Spaceport,           // Майор: космопорт
         GlobalMap,           // Майор: глобальная карта и перелёты
         GarrisonCommand,     // Майор: командование гарнизоном (пополнение)
+        MultiLevel,          // Лейтенант: второй ярус — настил, лестницы, колонны, турели на стенах
     }
 
     /// <summary>
@@ -50,6 +51,7 @@ namespace Echo7
             { Feature.Spaceport, Rank.Major },
             { Feature.GlobalMap, Rank.Major },
             { Feature.GarrisonCommand, Rank.Major },
+            { Feature.MultiLevel, Rank.Lieutenant },
         };
 
         public static string RankName(Rank r)
@@ -79,6 +81,7 @@ namespace Echo7
                 case Feature.Spaceport: return "Космопорт";
                 case Feature.GlobalMap: return "Глобальная карта и перелёты";
                 case Feature.GarrisonCommand: return "Командование гарнизоном";
+                case Feature.MultiLevel: return "Второй ярус: настил, лестницы, турели на стенах";
             }
             return "Базовое строительство";
         }

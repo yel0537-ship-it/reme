@@ -92,7 +92,7 @@ namespace Echo7
                 if (_jobs.TryGetValue(s, out var owner) && owner != d && owner != null) continue;
                 JobKind k = JobKind.None;
                 float prio = 0f;
-                if (!s.IsBuilt) { k = JobKind.Build; prio = 0f; }
+                if (!s.IsBuilt) { if (!s.ReadyToBuild) continue; k = JobKind.Build; prio = 0f; }
                 else if (s.Health.Current < s.Health.Max * (wave ? 0.6f : 0.97f) && Game.Bank[ResourceType.Alloys] > 0) { k = JobKind.Repair; prio = 30f + s.Health.Fraction * 40f; if (s.IsTargetCore) prio -= 40f; }
                 else if (s.NeedsService && !(_serviceCooldown.TryGetValue(s, out var cd) && Time.time < cd)) { k = JobKind.Service; prio = 60f; }
                 if (k == JobKind.None) continue;

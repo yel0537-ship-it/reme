@@ -12,6 +12,10 @@ namespace Echo7
         public BuildingDef Def { get; private set; }
         public RectInt Footprint { get; private set; }
         public int Rotation { get; private set; }
+        /// <summary>Уровень: 0 — земля, 1 — второй ярус.</summary>
+        public int Level { get; private set; }
+        public GridLayer Layer { get; private set; }
+        public bool IsElevated => Level > 0;
         public Health Health { get; private set; }
         public bool IsBuilt { get; private set; }
         public float BuildProgress { get; private set; }
@@ -44,26 +48,38 @@ namespace Echo7
         public string InteractLabel => IsBuilt ? $"Осмотр: {Def.Name}" : $"Помочь строить: {Def.Name} ({Mathf.RoundToInt(BuildProgress * 100)}%)";
         public Vector3 InteractPoint => ClosestPoint(Game.Player != null ? Game.Player.transform.position : transform.position);
         public float InteractRange => 2.2f;
-        public bool CanInteract => !IsDestroyed;
+        public virtual bool CanInteract => !IsDestroyed;
+
+        /// <summary>Можно ли сейчас вести монтаж: у построек второго яруса опора (и настил) должны быть достроены.</summary>
+        public bool ReadyToBuild => Level == 0 || Game.Grid == null || Game.Grid.SupportReady(this);
+
+        /// <summary>Склеивать ли статичные меши модели (стены и настил перестраивают секции — не склеиваем).</summary>
+        protected virtual bool CombineModel => true;
 
         /// <summary>Фабрика: создаёт постройку нужного класса с моделью и регистрирует в сетке.</summary>
-        public static Structure Create(BuildingDef def, RectInt footprint, int rotation, bool instant)
+        public static Structure Create(BuildingDef def, RectInt footprint, int rotation, bool instant, int level = 0)
         {
             var go = new GameObject(def.Name);
             go.transform.SetParent(Game.Build != null ? Game.Build.transform : Game.Root, false);
             go.layer = Layers.Structure;
             var s = (Structure)go.AddComponent(def.Component);
-            s.Setup(def, footprint, rotation, instant);
+            s.Setup(def, footprint, rotation, instant, level);
             return s;
         }
 
-        void Setup(BuildingDef def, RectInt footprint, int rotation, bool instant)
+        /// <summary>Слой сетки для постройки на уровне: настил — свой слой второго яруса.</summary>
+        public static GridLayer LayerFor(BuildingDef def, int level) =>
+            def.Kind == StructureKind.Deck ? GridLayer.Deck : level > 0 ? GridLayer.Upper : GridLayer.Ground;
+
+        void Setup(BuildingDef def, RectInt footprint, int rotation, bool instant, int level)
         {
             Def = def;
             Footprint = footprint;
             Rotation = rotation;
+            Layer = LayerFor(def, level);
+            Level = Layer == GridLayer.Ground ? 0 : 1;
             var pos = Game.Grid.RectCenter(footprint);
-            pos.y = MaxGroundHeight(footprint);
+            pos.y = MaxGroundHeight(footprint) + (Level > 0 ? WorldGrid.LevelHeight : 0f);
             transform.position = pos;
             transform.rotation = Quaternion.Euler(0, rotation * 90f, 0);
 
@@ -79,14 +95,15 @@ namespace Echo7
             def.Model?.Invoke(mb, def);
             Model = mb.Root;
             CollectNightLights();
-            if (!(this is WallSegment)) ModelBuilder.CombineStatic(Model);
+            if (CombineModel) ModelBuilder.CombineStatic(Model);
 
             _collider = gameObject.AddComponent<BoxCollider>();
             var size = new Vector3(def.Size.x * WorldGrid.CellSize * 0.96f, Mathf.Max(0.6f, def.Height), def.Size.y * WorldGrid.CellSize * 0.96f);
             _collider.size = size;
             _collider.center = new Vector3(0, size.y * 0.5f, 0);
+            ConfigureCollider(_collider);
 
-            Game.Grid.Occupy(this, footprint);
+            Game.Grid.Occupy(this, footprint, Layer);
             Registry.Structures.Add(this);
             OnCreated();
 
@@ -119,6 +136,9 @@ namespace Echo7
             foreach (var l in NightLights) if (l != null) l.enabled = on;
         }
 
+        /// <summary>Подстройка коллайдера под форму (настил — плита, лестница — пандус).</summary>
+        protected virtual void ConfigureCollider(BoxCollider c) { }
+
         protected virtual void OnCreated() { }
         protected virtual void OnBuilt() { }
         protected virtual void OnRemoved() { }
@@ -126,7 +146,7 @@ namespace Echo7
         /// <summary>Вклад в строительство: amount — доля от 0 до 1.</summary>
         public void AddProgress(float amount)
         {
-            if (IsBuilt || IsDestroyed) return;
+            if (IsBuilt || IsDestroyed || !ReadyToBuild) return;
             BuildProgress = Mathf.Clamp01(BuildProgress + amount);
             Health.Current = Mathf.Max(Health.Current, Health.Max * Mathf.Lerp(0.1f, 1f, BuildProgress));
             if (BuildProgress >= 1f) Complete(false);
@@ -199,7 +219,7 @@ namespace Echo7
             }
             if (IsBuilt && Def.StorageBonus > 0 && Game.Bank != null) Game.Bank.ExtraCapacity -= Def.StorageBonus;
             OnRemoved();
-            Game.Grid.Free(this, Footprint);
+            Game.Grid.Free(this, Footprint, Layer);
             Registry.Structures.Remove(this);
             Game.Power?.MarkDirty();
             GameEvents.Destroyed(this);
@@ -210,8 +230,27 @@ namespace Echo7
         public void Demolish()
         {
             if (IsDestroyed || IsTargetCore || !Def.Buildable) return;
+            var blocker = Game.Grid.DemolishBlocker(this);
+            if (blocker != null) { Game.Log?.Warn(blocker); Game.Sound?.Play2D(Sfx.UiError, 0.6f); return; }
             if (!FreeOfCharge) Game.Bank.Add(Def.Cost.Scaled(IsBuilt ? 0.5f : 1f));
             DestroyStructure(true);
+        }
+
+        /// <summary>Обрушение: опора под постройкой второго яруса разрушена.</summary>
+        public void Collapse()
+        {
+            if (IsDestroyed) return;
+            var pos = transform.position;
+            Game.Fx?.Emit(FxKind.Debris, pos, 18, Vector3.down);
+            Game.Fx?.Emit(FxKind.Sparks, pos + Vector3.up * 0.5f, 10, Vector3.down);
+            Game.Log?.Alert($"Обрушение: «{Def.Name}» лишился опоры!");
+            Game.Tutorial?.ShowTip("collapse", "Обрушение", "Второй ярус держится на стенах и колоннах. Разрушили опору — настил и всё, что на нём, падает. Чините стены под турелями и ставьте колонны с двух сторон пролёта.");
+            // падающие обломки бьют тех, кто внизу
+            var below = pos + Vector3.down * WorldGrid.LevelHeight;
+            foreach (var e in Registry.Enemies.ToArray())
+                if (e != null && !e.IsDead && (e.transform.position - below).sqrMagnitude < HalfExtent * HalfExtent + 4f)
+                    e.Health.TakeDamage(new DamageInfo(60f, DamageType.Explosive, e.transform.position, Faction.Player, gameObject));
+            DestroyStructure(false);
         }
 
         public Vector3 ClosestPoint(Vector3 p)
@@ -235,6 +274,7 @@ namespace Echo7
         /// <summary>Строка состояния для инспектора.</summary>
         public virtual string StatusText()
         {
+            if (!IsBuilt && !ReadyToBuild) return "Ждёт опору: сначала достройте стену, колонну или настил под постройкой";
             if (!IsBuilt) return $"Строится: {Mathf.RoundToInt(BuildProgress * 100)}%";
             if (CableCut) return "Кабель перегрызен — нужен ремонт";
             if (Def.NeedsPower && !Powered) return "Нет подключения к энергосети";

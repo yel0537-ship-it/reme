@@ -48,6 +48,7 @@ namespace Echo7
             _cc.slopeLimit = 50f;
             _cc.stepOffset = 0.45f;
             gameObject.layer = Layers.Player;
+            Physics.IgnoreLayerCollision(Layers.Player, Layers.Rail, false);
             Health = gameObject.AddComponent<Health>();
             Health.Init(160f, ArmorClass.Medium, Faction.Player, 2f);
             Health.Died += _ => Die();
@@ -143,7 +144,7 @@ namespace Echo7
                         }
                     }
                 }
-                if (Game.CameraRig.MouseOnGround(out var ground))
+                if (Game.CameraRig.MouseOnWalkable(out var ground))
                 {
                     if (fresh) { Focus = null; AttackTarget = null; StopMining(); }
                     if (fresh || _repathTimer <= 0f)
@@ -203,8 +204,9 @@ namespace Echo7
         {
             _path.Clear();
             _pathIdx = 0;
-            // прямая видимость — без A*
-            if (!Physics.Linecast(transform.position + Vector3.up * 0.8f, p + Vector3.up * 0.8f, Layers.StructureMask | 1, QueryTriggerInteraction.Ignore))
+            // прямая видимость на том же ярусе — без A* (между ярусами — только по лестнице)
+            bool sameLevel = Game.Grid.LevelAt(transform.position) == Game.Grid.LevelAt(p);
+            if (sameLevel && !Physics.Linecast(transform.position + Vector3.up * 0.8f, p + Vector3.up * 0.8f, Layers.StructureMask | 1, QueryTriggerInteraction.Ignore))
                 _path.Add(p);
             else if (!_pf.FindPath(transform.position, p, _path))
                 _path.Add(p);
@@ -222,6 +224,7 @@ namespace Echo7
             dir.y = 0;
             _rollDir = dir.normalized;
             _rollT = 0f;
+            Physics.IgnoreLayerCollision(Layers.Player, Layers.Rail, true);   // перекат — через перила, вниз с яруса
             _rollCd = 1.1f;
             Health.Invulnerable = true;
             _path.Clear();
@@ -252,7 +255,7 @@ namespace Echo7
                 _rollT += dt / 0.4f;
                 Rig.RollT = _rollT;
                 desired = _rollDir * 13f;
-                if (_rollT >= 1f) { _rollT = -1f; Rig.RollT = -1f; Health.Invulnerable = false; }
+                if (_rollT >= 1f) { _rollT = -1f; Rig.RollT = -1f; Health.Invulnerable = false; Physics.IgnoreLayerCollision(Layers.Player, Layers.Rail, false); }
             }
             else
             {
@@ -463,6 +466,8 @@ namespace Echo7
 
         public void Teleport(Vector3 p)
         {
+            if (_rollT >= 0f) { _rollT = -1f; Rig.RollT = -1f; Health.Invulnerable = false; }
+            Physics.IgnoreLayerCollision(Layers.Player, Layers.Rail, false);
             p.y = Game.Grid.SampleHeight(p);
             _cc.enabled = false;
             transform.position = p;

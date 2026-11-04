@@ -244,6 +244,80 @@ namespace Echo7
             }
         }
 
+        // ------------------------------------------------------------ второй ярус
+
+        /// <summary>Плита настила: начало координат — верх поверхности (на высоте яруса).</summary>
+        public static void Deck(ModelBuilder mb, BuildingDef def)
+        {
+            const float w = WorldGrid.CellSize;
+            mb.Box(new Vector3(0, -0.15f, 0), new Vector3(w, 0.3f, w), M, 0.03f);
+            // рифлёный настил: тёмные полосы
+            for (int i = -2; i <= 2; i++) mb.Box(new Vector3(i * 0.38f, 0.005f, 0), new Vector3(0.06f, 0.02f, w * 0.92f), D, 0f);
+            // балки под плитой
+            mb.Box(new Vector3(0, -0.42f, -0.6f), new Vector3(w * 0.96f, 0.25f, 0.18f), D, 0.02f);
+            mb.Box(new Vector3(0, -0.42f, 0.6f), new Vector3(w * 0.96f, 0.25f, 0.18f), D, 0.02f);
+            mb.Strip(new Vector3(0, -0.16f, w * 0.5f), new Vector3(w * 0.8f, 0.05f, 0.03f), O);
+        }
+
+        /// <summary>Перила по краю настила в направлении dir (мировые оси).</summary>
+        public static void DeckRail(ModelBuilder mb, Vector3 dir)
+        {
+            const float w = WorldGrid.CellSize;
+            bool alongX = Mathf.Abs(dir.z) > 0.5f;   // край, перпендикулярный dir
+            var edge = dir * (w * 0.47f);
+            Vector3 Along(float len, float h, float th) => alongX ? new Vector3(len, h, th) : new Vector3(th, h, len);
+            Vector3 Side(float t) => alongX ? new Vector3(t, 0, 0) : new Vector3(0, 0, t);
+            mb.Box(edge + Vector3.up * 1.0f, Along(w, 0.07f, 0.07f), M, 0f);
+            mb.Box(edge + Vector3.up * 0.55f, Along(w, 0.05f, 0.05f), D, 0f);
+            mb.Strip(edge + Vector3.up * 1.04f, Along(w * 0.9f, 0.02f, 0.08f), O);
+            foreach (var t in new[] { -0.92f, 0f, 0.92f })
+                mb.Box(edge + Side(t) + Vector3.up * 0.5f, new Vector3(0.08f, 1.0f, 0.08f), M, 0f);
+        }
+
+        /// <summary>Подкос консоли: от края настила вниз к опоре в соседней клетке (dir — к опоре).</summary>
+        public static void DeckBrace(ModelBuilder mb, Vector3 dir)
+        {
+            const float w = WorldGrid.CellSize;
+            var a = -dir * (w * 0.3f) + Vector3.down * 0.35f;
+            var b = dir * (w * 0.45f) + Vector3.down * 1.7f;
+            var v = b - a;
+            mb.Box((a + b) * 0.5f, new Vector3(0.14f, 0.14f, v.magnitude), D, 0.02f, null, Quaternion.LookRotation(v).eulerAngles);
+            mb.Box(b + Vector3.up * 0.1f, new Vector3(0.4f, 0.3f, 0.4f), M, 0.03f);
+        }
+
+        /// <summary>Лестница: начало координат — центр основания, подъём в сторону +Z до высоты яруса.</summary>
+        public static void Stairs(ModelBuilder mb, BuildingDef def)
+        {
+            const float w = WorldGrid.CellSize;
+            float len = w * 2f, h = WorldGrid.LevelHeight;
+            int steps = 9;
+            float sl = len / steps, sh = h / steps;
+            for (int i = 0; i < steps; i++)
+            {
+                float z = -len * 0.5f + (i + 0.5f) * sl;
+                float top = (i + 1) * sh;
+                mb.Box(new Vector3(0, top - 0.06f, z), new Vector3(w * 0.8f, 0.12f, sl * 1.02f), i % 2 == 0 ? M : L, 0.01f);
+            }
+            float ang = Mathf.Atan2(h, len) * Mathf.Rad2Deg;
+            float hyp = Mathf.Sqrt(len * len + h * h);
+            foreach (var x in new[] { -w * 0.42f, w * 0.42f })
+            {
+                mb.Box(new Vector3(x, h * 0.5f - 0.15f, 0), new Vector3(0.12f, 0.35f, hyp), D, 0.02f, null, new Vector3(-ang, 0, 0));
+                mb.Box(new Vector3(x, h * 0.5f + 0.85f, 0), new Vector3(0.06f, 0.06f, hyp), M, 0f, null, new Vector3(-ang, 0, 0));
+                mb.Strip(new Vector3(x, h * 0.5f + 0.89f, 0), new Vector3(0.07f, 0.02f, hyp * 0.95f), O, null, new Vector3(-ang, 0, 0));
+                mb.Box(new Vector3(x, 0.5f, -len * 0.5f + 0.1f), new Vector3(0.08f, 1.0f, 0.08f), M, 0f);
+                mb.Box(new Vector3(x, h * 0.5f + 0.15f, len * 0.5f - 0.1f), new Vector3(0.12f, h + 0.5f, 0.12f), D, 0.02f);
+            }
+            mb.Strip(new Vector3(0, 0.03f, -len * 0.5f + 0.05f), new Vector3(w * 0.7f, 0.04f, 0.06f), Palette.Hazard);
+        }
+
+        public static void Pillar(ModelBuilder mb, BuildingDef def)
+        {
+            mb.Hex(new Vector3(0, 0.12f, 0), 0.8f, 0.24f, Palette.Concrete);
+            WallPost(mb, def.Height, Palette.Metal, true);
+            mb.Box(new Vector3(0, def.Height + 0.1f, 0), new Vector3(1.6f, 0.18f, 1.6f), M, 0.03f);
+        }
+
         static Transform TurretBase(ModelBuilder mb, float r, float h)
         {
             mb.Hex(new Vector3(0, h * 0.5f, 0), r, h, M);

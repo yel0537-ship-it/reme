@@ -10,6 +10,7 @@ namespace Echo7
     [Serializable] public class StructEntry
     {
         public int kind, x, y, w, h, rot;
+        public int level;   // 0 — земля, 1 — второй ярус
         public float hp, progress, wear;
         public bool built, cableCut, mineArmed = true, freeOfCharge;
         public int crew = -1, dronePriority = -1;
@@ -132,7 +133,7 @@ namespace Echo7
                 if (s == null || s.IsDestroyed) continue;
                 var e = new StructEntry
                 {
-                    kind = (int)s.Def.Kind, x = s.Footprint.x, y = s.Footprint.y, w = s.Footprint.width, h = s.Footprint.height, rot = s.Rotation,
+                    kind = (int)s.Def.Kind, x = s.Footprint.x, y = s.Footprint.y, w = s.Footprint.width, h = s.Footprint.height, rot = s.Rotation, level = s.Level,
                     hp = s.Health.Current, built = s.IsBuilt, progress = s.BuildProgress, cableCut = s.CableCut, freeOfCharge = s.FreeOfCharge
                 };
                 if (s is Turret t) { e.wear = t.Wear; if (t.Crew != null) e.crew = npcs.IndexOf(t.Crew); }
@@ -169,12 +170,21 @@ namespace Echo7
             foreach (var t in ResourceBank.All) Game.Bank.Set(t, 0);
             foreach (var r in d.resources) Game.Bank.Set((ResourceType)r.type, r.amount);
 
-            foreach (var e in d.structures)
+            // порядок: сначала земля (опоры), потом настил, потом то, что стоит на втором ярусе
+            var ordered = new List<StructEntry>(d.structures);
+            int Order(StructEntry e) => e.level <= 0 ? 0 : (StructureKind)e.kind == StructureKind.Deck ? 1 : 2;
+            for (int i = 1; i < ordered.Count; i++)   // устойчивая сортировка вставками
+            {
+                var cur = ordered[i]; int j = i - 1;
+                while (j >= 0 && Order(ordered[j]) > Order(cur)) { ordered[j + 1] = ordered[j]; j--; }
+                ordered[j + 1] = cur;
+            }
+            foreach (var e in ordered)
             {
                 var def = BuildingCatalog.Get((StructureKind)e.kind);
                 var size = BuildSystem.SizeRotated(def, e.rot);
                 var center = new Vector2Int(e.x + size.x / 2, e.y + size.y / 2);
-                var s = Game.Build.PlaceInstant(def.Kind, center, e.rot, e.built);
+                var s = Game.Build.PlaceInstant(def.Kind, center, e.rot, e.built, e.level);
                 if (s == null) continue;
                 if (!e.built) s.AddProgress(e.progress);
                 s.Health.Current = Mathf.Clamp(e.hp, 1f, s.Health.Max);
@@ -187,6 +197,7 @@ namespace Echo7
                 if (s is Reactor rc) rc.BonusOutput = d.reactorBonus;
             }
             Game.Power.MarkDirty();
+            Game.Grid.TakeSupportCheck();   // всё восстановлено вместе с опорами — проверять обрушение не нужно
         }
 
         /// <summary>Шаг 2 загрузки: прогрессия, гарнизон, время, погода, задачи.</summary>
@@ -216,7 +227,7 @@ namespace Echo7
             foreach (var e in d.structures)
             {
                 if (e.crew < 0 || e.crew >= spawned.Count) continue;
-                var s = Game.Grid.StructureAt(e.x, e.y) as Turret;
+                var s = Game.Grid.StructureAt(e.x, e.y, e.level) as Turret;
                 if (s != null) Game.Defense.AssignCrew(s, spawned[e.crew]);
             }
 
@@ -226,7 +237,11 @@ namespace Echo7
             Game.Supply.Init();
             Game.Supply.Restore(d.nextDelivery, (SupplyPriority)d.supplyPriority, d.supplySkip);
             Game.Player.ApplySkillBonuses();
-            Game.Player.Teleport(new Vector3(d.playerX, 0, d.playerZ));
+            // сохранились на втором ярусе — встаём на ближайшую свободную клетку земли, а не внутрь стены
+            var pp = new Vector3(d.playerX, 0, d.playerZ);
+            var pc = Game.Grid.WorldToCell(pp);
+            if (Game.Grid.InBounds(pc) && !Game.Grid.WalkableFriendly(pc.x, pc.y)) pp = Game.Grid.CellCenter(Game.Grid.NearestWalkable(pc, 6));
+            Game.Player.Teleport(pp);
             Game.Player.Health.Current = Mathf.Clamp(d.playerHp, 1f, Game.Player.Health.Max);
         }
     }

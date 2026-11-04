@@ -285,6 +285,7 @@ namespace Echo7
     public class WallSegment : Structure
     {
         Transform _links;
+        protected override bool CombineModel => false;
         static readonly Vector2Int[] Dirs = { new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(-1, 0), new Vector2Int(0, -1) };
 
         protected override void OnCreated()
@@ -399,6 +400,173 @@ namespace Echo7
             _door.localPosition = new Vector3(0, Mathf.Lerp(1.6f, 4.4f, _open), 0);
             // открытые ворота физически пропускают игрока (CharacterController)
             if (Collider != null) Collider.enabled = _open < 0.6f;
+        }
+    }
+
+    /// <summary>
+    /// Настил второго яруса: плита 2×2 м на высоте верха стены. Держится на опоре под собой или консолью
+    /// на соседнем настиле, который стоит на опоре. По открытым краям — перила (и коллайдеры, чтобы не падать),
+    /// у консоли — подкос к опоре. Осмотр/снос — Shift+клик (обычный клик — идти по настилу).
+    /// </summary>
+    public class Deck : Structure
+    {
+        Transform _edges;
+        readonly List<GameObject> _rails = new List<GameObject>();
+        static readonly Vector2Int[] Dirs = { new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(-1, 0), new Vector2Int(0, -1) };
+
+        protected override bool CombineModel => false;
+        public override bool CanInteract => !IsDestroyed && (!IsBuilt || InputBridge.KeyHeld(GameKey.LeftShift));
+
+        protected override void ConfigureCollider(BoxCollider c)
+        {
+            c.size = new Vector3(WorldGrid.CellSize * 0.98f, 0.3f, WorldGrid.CellSize * 0.98f);
+            c.center = new Vector3(0, -0.15f, 0);
+        }
+
+        protected override void OnCreated() { RefreshEdges(); RefreshNeighbours(); }
+        protected override void OnBuilt() { RefreshEdges(); RefreshNeighbours(); }
+        protected override void OnRemoved() { Game.Entry?.StartCoroutine(RefreshAround(Footprint.position)); }
+
+        static System.Collections.IEnumerator RefreshAround(Vector2Int cell)
+        {
+            yield return null;
+            if (Game.Grid == null) yield break;
+            foreach (var d in Dirs) (Game.Grid.DeckAt(cell.x + d.x, cell.y + d.y) as Deck)?.RefreshEdges();
+        }
+
+        void RefreshNeighbours()
+        {
+            foreach (var d in Dirs)
+            {
+                var n = Game.Grid.DeckAt(Footprint.x + d.x, Footprint.y + d.y) as Deck;
+                if (n != null && n != this && !n.IsDestroyed) n.RefreshEdges();
+            }
+        }
+
+        public bool DirectlySupported => Game.Grid.IsSupport(Footprint.x, Footprint.y);
+
+        public void RefreshEdges()
+        {
+            if (IsDestroyed || Model == null) return;
+            if (_edges != null) Destroy(_edges.gameObject);
+            foreach (var r in _rails) if (r != null) Destroy(r);
+            _rails.Clear();
+            var mb = new ModelBuilder(Model, "#edges");
+            _edges = mb.Root;
+            _edges.localRotation = Quaternion.Inverse(transform.rotation); // перила — в мировых осях
+            var g = Game.Grid;
+            var c = Footprint.position;
+            bool direct = DirectlySupported;
+            var stair = g.InBounds(c) ? g.StairExit[g.Index(c.x, c.y)] : null;
+            foreach (var d in Dirs)
+            {
+                int nx = c.x + d.x, ny = c.y + d.y;
+                var nd = g.DeckAt(nx, ny);
+                bool deckNext = nd != null && !nd.IsDestroyed;
+                bool stairNext = stair != null && !stair.IsDestroyed && stair.TopCell.x == nx && stair.TopCell.y == ny;
+                var nu = g.UpperAt(nx, ny);
+                bool upperNext = nu != null && !nu.IsDestroyed;
+                if (!deckNext && !stairNext && !upperNext)
+                {
+                    StructureModels.DeckRail(mb, new Vector3(d.x, 0, d.y));
+                    AddRailCollider(d);
+                }
+                if (!direct && deckNext && g.IsSupport(nx, ny)) StructureModels.DeckBrace(mb, new Vector3(d.x, 0, d.y));
+            }
+            if (!IsBuilt) ModelBuilder.SwapAll(_edges, Palette.HoloBuild);
+        }
+
+        void AddRailCollider(Vector2Int d)
+        {
+            var go = new GameObject("rail") { layer = Layers.Rail };
+            go.transform.SetParent(transform, false);
+            go.transform.rotation = Quaternion.identity;
+            go.transform.position = transform.position + new Vector3(d.x, 0, d.y) * (WorldGrid.CellSize * 0.47f) + Vector3.up * 0.55f;
+            var bc = go.AddComponent<BoxCollider>();
+            bc.size = d.x != 0 ? new Vector3(0.12f, 1.1f, WorldGrid.CellSize) : new Vector3(WorldGrid.CellSize, 1.1f, 0.12f);
+            _rails.Add(go);
+        }
+
+        public override string StatusText()
+        {
+            var b = base.StatusText();
+            if (!IsBuilt) return b;
+            return b + (DirectlySupported ? "\nОпора — прямо под настилом" : "\nКонсоль: держится за соседний настил на опоре") + "\nShift+клик — осмотр, обычный клик — пройти по настилу";
+        }
+    }
+
+    /// <summary>
+    /// Лестница 1×2: пандус с ступенями от земли до второго яруса. Верхний конец упирается в настил (ExitCell).
+    /// Для поиска пути — единственный переход между уровнями. Физически — наклонный коллайдер (игрок поднимается сам).
+    /// </summary>
+    public class Stairs : Structure
+    {
+        public Vector2Int LowCell { get; private set; }
+        public Vector2Int TopCell { get; private set; }
+        public Vector2Int ExitCell { get; private set; }
+
+        public override bool CanInteract => !IsDestroyed && (!IsBuilt || InputBridge.KeyHeld(GameKey.LeftShift));
+
+        /// <summary>Клетки лестницы по прямоугольнику и повороту: нижняя, верхняя и клетка настила, куда она выводит.</summary>
+        public static void CellsFor(RectInt fp, int rot, out Vector2Int low, out Vector2Int top, out Vector2Int exit)
+        {
+            switch (rot & 3)
+            {
+                case 0: low = new Vector2Int(fp.x, fp.y); top = new Vector2Int(fp.x, fp.y + 1); exit = new Vector2Int(fp.x, fp.y + 2); break;
+                case 1: low = new Vector2Int(fp.x, fp.y); top = new Vector2Int(fp.x + 1, fp.y); exit = new Vector2Int(fp.x + 2, fp.y); break;
+                case 2: low = new Vector2Int(fp.x, fp.y + 1); top = new Vector2Int(fp.x, fp.y); exit = new Vector2Int(fp.x, fp.y - 1); break;
+                default: low = new Vector2Int(fp.x + 1, fp.y); top = new Vector2Int(fp.x, fp.y); exit = new Vector2Int(fp.x - 1, fp.y); break;
+            }
+        }
+
+        protected override void ConfigureCollider(BoxCollider c)
+        {
+            // основной коробчатый коллайдер не нужен — его заменяет наклонный пандус
+            c.enabled = false;
+            float len = WorldGrid.CellSize * 2f, h = WorldGrid.LevelHeight;
+            float ang = Mathf.Atan2(h, len) * Mathf.Rad2Deg;
+            var go = new GameObject("#ramp") { layer = Layers.Structure };
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(0, h * 0.5f - 0.15f / Mathf.Cos(ang * Mathf.Deg2Rad), 0);
+            go.transform.localRotation = Quaternion.Euler(-ang, 0, 0);
+            var bc = go.AddComponent<BoxCollider>();
+            bc.size = new Vector3(WorldGrid.CellSize * 0.9f, 0.3f, Mathf.Sqrt(len * len + h * h));
+        }
+
+        protected override void OnCreated()
+        {
+            CellsFor(Footprint, Rotation, out var low, out var top, out var exit);
+            LowCell = low; TopCell = top; ExitCell = exit;
+            Game.Grid.RegisterStair(this);
+            (Game.Grid.DeckAt(exit.x, exit.y) as Deck)?.RefreshEdges();
+        }
+
+        protected override void OnRemoved()
+        {
+            Game.Grid.UnregisterStair(this);
+            Game.Entry?.StartCoroutine(RefreshExitLater(ExitCell));
+        }
+
+        static System.Collections.IEnumerator RefreshExitLater(Vector2Int exit)
+        {
+            yield return null;
+            (Game.Grid?.DeckAt(exit.x, exit.y) as Deck)?.RefreshEdges();
+        }
+
+        /// <summary>Высота пандуса в точке: 0 у нижнего края, LevelHeight у верхнего.</summary>
+        public float RampHeight(Vector3 p)
+        {
+            var local = Quaternion.Inverse(transform.rotation) * (p - transform.position);
+            float t = Mathf.Clamp01((local.z + WorldGrid.CellSize) / (WorldGrid.CellSize * 2f));
+            return transform.position.y + t * WorldGrid.LevelHeight;
+        }
+
+        public override string StatusText()
+        {
+            var b = base.StatusText();
+            if (!IsBuilt) return b;
+            bool ok = Game.Grid.WalkableUpper(ExitCell.x, ExitCell.y);
+            return b + (ok ? "\nВыводит на настил второго яруса" : "\nНаверху нет достроенного настила — подняться некуда");
         }
     }
 

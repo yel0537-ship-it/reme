@@ -512,13 +512,25 @@ namespace Echo7
             var b = Game.Build;
             if (b == null || !b.IsPlacing) return;
             var d = b.Selected;
-            var r = new Rect(W / 2 - 340, H - 290, 680, 66);
+            string tier = null;
+            if (d.Kind == StructureKind.Deck) tier = "ВТОРОЙ ЯРУС: настил кладут на стены и колонны, консоль — до 1 клетки";
+            else if (d.Kind == StructureKind.Stairs) tier = "Верхний конец лестницы — к настилу (R — поворот)";
+            else if (b.CanToggleLevel) tier = b.PlacementLevel > 0
+                ? "Q — ЯРУС: ВТОРОЙ (на стене или настиле; дальность турелей выше)"
+                : "Q — ярус: земля (нажмите Q, чтобы поставить на стену или настил)";
+            var r = new Rect(W / 2 - 340, H - (tier != null ? 312 : 290), 680, tier != null ? 88 : 66);
             Block(r);
             UiSkin.Panel2(r);
             GUI.Label(new Rect(r.x + 14, r.y + 8, 652, 22), $"<b>{d.Name.ToUpperInvariant()}</b>  ·  {b.CostOf(d)}  ·  R — поворот  ·  ПКМ/Esc — отмена{(d.LinePlacement ? "  ·  тяните мышью для линии" : "  ·  Shift — несколько")}", UiSkin.Small);
             string why = b.LastInvalidReason;
             string ok = b.OutOfPower ? UiSkin.Col("▲ Место подходит, но вне энергосети — поставьте энергоузел рядом", UiSkin.Accent) : UiSkin.Col("● Место подходит", UiSkin.Good);
-            GUI.Label(new Rect(r.x + 14, r.y + 34, 652, 22), why == null ? ok : UiSkin.Col("✕ " + why, UiSkin.Bad), UiSkin.Small);
+            float ly = r.y + 34;
+            if (tier != null)
+            {
+                GUI.Label(new Rect(r.x + 14, ly, 652, 22), UiSkin.Col(tier, b.PlacementLevel > 0 ? UiSkin.Cyan : UiSkin.Dim), UiSkin.Small);
+                ly += 22;
+            }
+            GUI.Label(new Rect(r.x + 14, ly, 652, 22), why == null ? ok : UiSkin.Col("✕ " + why, UiSkin.Bad), UiSkin.Small);
         }
 
         // ------------------------------------------------------------ голографический радар

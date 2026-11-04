@@ -22,13 +22,16 @@ namespace Echo7
         public Color Tracer = new Color(1f, 0.75f, 0.35f, 1f);
         public bool PreferHeavy;
 
+        /// <summary>Прибавка к дальности турели на втором ярусе (0.15 = +15%). Задаётся в ассете TurretBalance.</summary>
+        public static float ElevatedRangeBonus = 0.15f;
+
         /// <summary>Типы построек-турелей, у которых есть профиль.</summary>
         public static readonly StructureKind[] TurretKinds = { StructureKind.MgTurret, StructureKind.LaserTurret, StructureKind.HeavyTurret };
 
         static System.Collections.Generic.Dictionary<StructureKind, TurretProfile> _map;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() => _map = null;
+        static void ResetStatics() { _map = null; ElevatedRangeBonus = 0.15f; }
 
         /// <summary>
         /// Общий профиль для всех турелей этого типа. Значения — из ассета <see cref="TurretBalance"/>, без него — из кода.
@@ -49,6 +52,7 @@ namespace Echo7
 
         public static void Apply(TurretBalance asset)
         {
+            if (asset != null) ElevatedRangeBonus = Mathf.Max(0f, asset.elevatedRangeBonus);
             if (_map == null || asset == null) return;
             foreach (var e in asset.turrets)
             {
@@ -106,6 +110,7 @@ namespace Echo7
                 if (Game.Defense != null) r *= Game.Defense.SensorBonus(this);
                 if (Game.Weather != null) r *= Game.Weather.VisibilityFactor;
                 if (!Crewed) r *= 0.9f;
+                if (IsElevated) r *= 1f + TurretProfile.ElevatedRangeBonus;
                 return r;
             }
         }
@@ -150,8 +155,11 @@ namespace Echo7
         {
             var b = base.StatusText();
             if (!IsBuilt) return b;
-            string crew = Crewed ? $"Расчёт: {Crew.DisplayName} (мораль {Mathf.RoundToInt(Crew.Morale)})" : LostCrew ? "Расчёт погиб — автономный режим" : "Автономный режим";
-            return $"{b}\n{crew}\nИзнос: {Mathf.RoundToInt(Wear * 100)}%{(Jammed ? " — ЗАКЛИНИЛО" : "")}  ·  Убито: {Kills}";
+            string crew = Crewed ? $"Расчёт: {Crew.DisplayName} (мораль {Mathf.RoundToInt(Crew.Morale)})"
+                : Crew != null && Crew.NoAccess ? $"{Crew.DisplayName} не может подняться — нужна лестница к настилу у турели"
+                : LostCrew ? "Расчёт погиб — автономный режим" : "Автономный режим";
+            string tier = IsElevated ? $"\nВторой ярус: дальность +{Mathf.RoundToInt(TurretProfile.ElevatedRangeBonus * 100)}%, пехота не достаёт (кроме прыгунов и стрелков)" : "";
+            return $"{b}\n{crew}\nИзнос: {Mathf.RoundToInt(Wear * 100)}%{(Jammed ? " — ЗАКЛИНИЛО" : "")}  ·  Убито: {Kills}{tier}";
         }
 
         protected override void Update()

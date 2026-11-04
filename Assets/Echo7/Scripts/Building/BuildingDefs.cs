@@ -11,7 +11,8 @@ namespace Echo7
         Reactor, Command, Fence, Wall, TitaniumWall, Gate, Pylon, Solar, Generator,
         Habitat, MedBay, Storage, Extractor, Condenser, DroneBay,
         MgTurret, LaserTurret, HeavyTurret, Mine, Sensor, SurveyProbe, ShieldProjector,
-        LandingPad, Spaceport, DecoyBeacon
+        LandingPad, Spaceport, DecoyBeacon,
+        Deck, Stairs, Pillar
     }
 
     /// <summary>
@@ -42,6 +43,8 @@ namespace Echo7
         public bool PassableForFriendly;      // ворота
         public bool LinePlacement;            // стены — протяжкой
         public bool RequiresDeposit;          // экстрактор
+        public bool SupportsUpper;            // держит второй ярус (стены, колонны)
+        public bool AllowUpper;               // можно ставить на второй ярус (турели, сенсоры, узлы)
         public bool NeedsPower => EnergyUse > 0f;
         public float Height = 3f;
         public int Beds;
@@ -116,11 +119,11 @@ namespace Echo7
                     Component = typeof(WallSegment), Model = StructureModels.Fence },
                 new BuildingDef { Kind = StructureKind.Wall, Name = "Стена", Category = BuildCategory.Walls,
                     Description = "Модульная бетонная стена. Высокая — прыгуны не перепрыгнут.",
-                    Cost = C((Al, 7)), MaxHp = 650f, FlatArmor = 4f, BuildTime = 6f, LinePlacement = true, Height = 3.2f,
+                    Cost = C((Al, 7)), MaxHp = 650f, FlatArmor = 4f, BuildTime = 6f, LinePlacement = true, Height = 3.2f, SupportsUpper = true,
                     Component = typeof(WallSegment), Model = StructureModels.Wall },
                 new BuildingDef { Kind = StructureKind.TitaniumWall, Name = "Титановая стена", Category = BuildCategory.Walls,
                     Description = "Усиленная стена из местного титана. Держит удар «танка».",
-                    Cost = C((Al, 5), (Ti, 4)), MaxHp = 1500f, FlatArmor = 10f, BuildTime = 9f, LinePlacement = true, Height = 3.6f,
+                    Cost = C((Al, 5), (Ti, 4)), MaxHp = 1500f, FlatArmor = 10f, BuildTime = 9f, LinePlacement = true, Height = 3.2f, SupportsUpper = true,
                     RequiredFeature = Feature.TitaniumWalls, Component = typeof(WallSegment), Model = StructureModels.TitaniumWall },
                 new BuildingDef { Kind = StructureKind.Gate, Name = "Ворота", Category = BuildCategory.Walls,
                     Description = "Пропускают своих. Прыгуны могут повредить механизм — тогда ворота заклинит открытыми.",
@@ -129,7 +132,7 @@ namespace Echo7
 
                 new BuildingDef { Kind = StructureKind.Pylon, Name = "Энергоузел", Category = BuildCategory.Power,
                     Description = "Продлевает энергосеть (радиус 14 м). Мелкие твари перегрызают кабели и узлы.",
-                    Cost = C((Al, 5), (Si, 1)), MaxHp = 140f, BuildTime = 4f, PowerRadius = 14f, IsSmall = true, Height = 3.5f,
+                    Cost = C((Al, 5), (Si, 1)), MaxHp = 140f, BuildTime = 4f, PowerRadius = 14f, IsSmall = true, Height = 3.5f, AllowUpper = true,
                     Component = typeof(Structure), Model = StructureModels.Pylon },
                 new BuildingDef { Kind = StructureKind.Solar, Name = "Солнечная панель", Category = BuildCategory.Power,
                     Description = "+9 энергии днём. В пекло — больше, в бурю и дождь — почти ничего.",
@@ -169,15 +172,15 @@ namespace Echo7
                 new BuildingDef { Kind = StructureKind.MgTurret, Name = "Пулемётный узел", Category = BuildCategory.Defense,
                     Description = "Дешёвая скорострельная турель. Эффективна против лёгкой фауны, тратит патроны.",
                     Size = new Vector2Int(2, 2), Cost = C((Al, 18)), MaxHp = 450f, FlatArmor = 4f, BuildTime = 10f, EnergyUse = 2f, IsMechanism = true,
-                    Height = 2.6f, Component = typeof(Turret), Model = StructureModels.MgTurret },
+                    Height = 2.6f, AllowUpper = true, Component = typeof(Turret), Model = StructureModels.MgTurret },
                 new BuildingDef { Kind = StructureKind.LaserTurret, Name = "Лазерный излучатель", Category = BuildCategory.Defense,
                     Description = "Пробивает тяжёлую броню. Во время стрельбы потребляет много энергии.",
                     Size = new Vector2Int(2, 2), Cost = C((Al, 24), (Cr, 6), (Si, 4)), MaxHp = 400f, FlatArmor = 3f, BuildTime = 14f, EnergyUse = 3f, IsMechanism = true,
-                    RequiredFeature = Feature.LaserTurrets, Height = 2.8f, Component = typeof(Turret), Model = StructureModels.LaserTurret },
+                    RequiredFeature = Feature.LaserTurrets, Height = 2.8f, AllowUpper = true, Component = typeof(Turret), Model = StructureModels.LaserTurret },
                 new BuildingDef { Kind = StructureKind.HeavyTurret, Name = "Тяжёлая турель", Category = BuildCategory.Defense,
                     Description = "Орудие с осколочными снарядами. Медленное, бьёт по площади. 2 патрона за выстрел.",
                     Size = new Vector2Int(3, 3), Cost = C((Al, 42), (Ti, 14)), MaxHp = 950f, FlatArmor = 8f, BuildTime = 20f, EnergyUse = 5f, IsMechanism = true,
-                    RequiredFeature = Feature.HeavyTurrets, Height = 3.4f, Component = typeof(Turret), Model = StructureModels.HeavyTurret },
+                    RequiredFeature = Feature.HeavyTurrets, Height = 3.4f, AllowUpper = true, Component = typeof(Turret), Model = StructureModels.HeavyTurret },
                 new BuildingDef { Kind = StructureKind.Mine, Name = "Мина", Category = BuildCategory.Defense,
                     Description = "Расходуется при срабатывании. Перезарядка: 2 сплава и 2 патрона (дроны делают сами).",
                     Cost = C((Al, 3), (Am, 3)), MaxHp = 40f, FlatArmor = 0f, BuildTime = 2f, IsSmall = true, Height = 0.3f,
@@ -185,7 +188,7 @@ namespace Echo7
                 new BuildingDef { Kind = StructureKind.Sensor, Name = "Сенсорная мачта", Category = BuildCategory.Defense,
                     Description = "+15% дальности турелям в радиусе 20 м и раннее предупреждение о волнах.",
                     Cost = C((Al, 10), (Cr, 2)), MaxHp = 160f, BuildTime = 6f, EnergyUse = 2f, IsSmall = true, Height = 5f,
-                    MinRank = Rank.Lieutenant, Component = typeof(Structure), Model = StructureModels.Sensor },
+                    MinRank = Rank.Lieutenant, AllowUpper = true, Component = typeof(Structure), Model = StructureModels.Sensor },
                 new BuildingDef { Kind = StructureKind.SurveyProbe, Name = "Геологический зонд", Category = BuildCategory.Industry,
                     Description = "Геологоразведка: открывает скрытые залежи в радиусе 50 м.",
                     Cost = C((Al, 10), (Si, 2)), MaxHp = 150f, BuildTime = 6f, EnergyUse = 1f, IsSmall = true, Height = 3f,
@@ -207,6 +210,20 @@ namespace Echo7
                     Description = "Собственный челнок: полёты на орбитальную станцию и высадки в новых районах планеты.",
                     Size = new Vector2Int(5, 5), Cost = C((Al, 110), (Ti, 40), (Cr, 18)), MaxHp = 2600f, FlatArmor = 8f, BuildTime = 40f, EnergyUse = 14f,
                     RequiredFeature = Feature.Spaceport, Height = 8f, Component = typeof(Spaceport), Model = StructureModels.Spaceport },
+
+                // ---- второй ярус
+                new BuildingDef { Kind = StructureKind.Deck, Name = "Настил", Category = BuildCategory.Walls,
+                    Description = "Второй ярус. Кладётся на стены и колонны, на 1 клетку может выступать консолью. По настилу ходит гарнизон, на него ставят турели и сенсоры. Протяжка мышью.",
+                    Cost = C((Al, 4), (Ti, 1)), MaxHp = 320f, FlatArmor = 3f, BuildTime = 4f, LinePlacement = true, Height = 0.3f,
+                    RequiredFeature = Feature.MultiLevel, Component = typeof(Deck), Model = StructureModels.Deck },
+                new BuildingDef { Kind = StructureKind.Stairs, Name = "Лестница", Category = BuildCategory.Walls,
+                    Description = "Подъём на второй ярус. Верхний конец должен упираться в настил. Без лестницы расчёт не поднимется к турели на стене.",
+                    Size = new Vector2Int(1, 2), Cost = C((Al, 8)), MaxHp = 360f, FlatArmor = 3f, BuildTime = 5f, PassableForFriendly = true,
+                    Height = WorldGrid.LevelHeight, RequiredFeature = Feature.MultiLevel, Component = typeof(Stairs), Model = StructureModels.Stairs },
+                new BuildingDef { Kind = StructureKind.Pillar, Name = "Опорная колонна", Category = BuildCategory.Walls,
+                    Description = "Опора для настила там, где нет стены: вышки, галереи, мосты над проходом. Колонну можно подрубить — тогда ярус над ней обрушится.",
+                    Cost = C((Al, 5)), MaxHp = 420f, FlatArmor = 4f, BuildTime = 3f, Height = 3.2f, SupportsUpper = true,
+                    RequiredFeature = Feature.MultiLevel, Component = typeof(Structure), Model = StructureModels.Pillar },
             };
         }
 
