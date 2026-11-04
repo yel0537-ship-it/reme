@@ -37,14 +37,11 @@ namespace Echo7
     {
         public DialogueNode Current { get; private set; }
         public bool IsOpen => Current != null;
-        float _prevScale = 1f;
 
         public void Start(DialogueNode node)
         {
             if (node == null) return;
-            if (!IsOpen) { _prevScale = Time.timeScale > 0f ? Time.timeScale : 1f; }
             Current = node;
-            Time.timeScale = 0f;
             Game.Sound?.Play2D(Sfx.UiClick, 0.6f);
         }
 
@@ -65,7 +62,6 @@ namespace Echo7
         {
             if (Current == null) return;
             Current = null;
-            Time.timeScale = Game.Ui != null && Game.Ui.Paused ? 0f : _prevScale;
         }
     }
 
@@ -167,6 +163,42 @@ namespace Echo7
             node.Add("Глобальная карта и перелёты", () => Game.Ui.Open(UiWindow.GlobalMap), null, () => Game.Rank.LockReason(Feature.GlobalMap));
             node.Add("Конец связи.");
             return node;
+        }
+
+        static readonly Color MentorColor = new Color(0.12f, 0.36f, 0.48f, 0.95f);
+        const string MentorSpeaker = "Капитан Левина · Центр";
+
+        /// <summary>Первая связь с Центром во время пролога: что такое Центр, поставки, репутация, задачи.</summary>
+        public static DialogueNode TutorialComms()
+        {
+            var node = Say(MentorSpeaker, "Л", MentorColor,
+                "Связь есть, специалист. Коротко о том, как мы работаем.\n\n" +
+                "Центр колонии — на орбитальной станции. Мы <b>присылаем снабжение</b>, <b>ставим задачи</b> и <b>присваиваем звания</b>. " +
+                "Ваша работа — держать аванпост и добывать то, чего нет на станции.");
+            node.Add("Как работает снабжение?", null, () =>
+            {
+                var n = Say(MentorSpeaker, "Л", MentorColor,
+                    "Каждое утро в 08:00 приходит капсула: сплавы, патроны, пайки, иногда аптечки.\n\n" +
+                    "Объём зависит от <b>репутации</b> (шкала в панели командира). Провалите задачи — Центр урежет поставку или пропустит её вовсе. " +
+                    "С ранга Капитан сможете сами выбирать профиль поставок.");
+                n.Add("А репутация?", null, RepNode);
+                n.Add("Понял. Конец связи.");
+                return n;
+            });
+            node.Add("Что за репутация и звания?", null, RepNode);
+            node.Add("Понял. Конец связи.");
+            return node;
+        }
+
+        static DialogueNode RepNode()
+        {
+            var n = Say(MentorSpeaker, "Л", MentorColor,
+                "<b>Репутация</b> (0–100) — насколько Центр вам доверяет. Растёт за выполненные задачи и помощь высоким чинам, падает за провалы и запросы.\n\n" +
+                "<b>Очки ранга</b> дают звания: Лейтенант, Капитан, Майор. Каждое звание открывает новые постройки и возможности — тяжёлые турели, рудник, космопорт. " +
+                "За звания же даются очки навыков [K].");
+            n.Add("Как работает снабжение?", null, () => TutorialComms().Choices[0].Next());
+            n.Add("Понял. Конец связи.");
+            return n;
         }
 
         static DialogueNode PriorityNode()

@@ -6,16 +6,20 @@ namespace Echo7
     public enum UiWindow { None, Build, Skills, Tasks, Garrison, GlobalMap, Orbital, Help }
 
     /// <summary>
-    /// Весь интерфейс: HUD в духе Diablo (шары здоровья/патронов, панель способностей), окна (строительство,
-    /// навыки, задачи, гарнизон, глобальная карта), диалоги, инспектор построек, оверлеи над объектами.
-    /// Доступ к окнам «запирается» рангом через PlayerRankManager (см. RequiredFeature).
+    /// Весь интерфейс в хайтек-стиле: HUD (биомонитор, вооружение, шестигранные способности, радар), окна (строительство,
+    /// навыки, задачи, гарнизон, глобальная карта), диалоги, инспектор построек, оверлеи над объектами, пролог.
+    /// Доступ к окнам «запирается» рангом (RequiredFeature) и ходом обучения (TutorialDirector.WindowRevealed).
+    /// Пауза централизована: LateUpdate ставит timeScale = 0, пока открыт диалог, пауза или брифинг.
     /// </summary>
     public partial class UiManager : MonoBehaviour
     {
         public UiWindow Window { get; private set; }
         public Structure Inspected { get; private set; }
         public bool Paused { get; private set; }
-        public bool ModalOpen => (Game.Dialogue != null && Game.Dialogue.IsOpen) || Paused || Game.State == GameState.GameOver;
+        public bool ModalOpen => (Game.Dialogue != null && Game.Dialogue.IsOpen) || Paused || Game.State == GameState.GameOver
+                                 || (Game.Tutorial != null && Game.Tutorial.Modal) || _modalClosedFrame == Time.frameCount;
+        /// <summary>Игра остановлена интерфейсом (пауза, диалог, брифинг).</summary>
+        public bool HoldsTime => Paused || (Game.Dialogue != null && Game.Dialogue.IsOpen) || (Game.Tutorial != null && Game.Tutorial.Modal);
         public bool WantsScroll { get; private set; }
 
         float _scale = 1f;
@@ -29,6 +33,7 @@ namespace Echo7
         string _selectedRegion = "home";
         float _demolishConfirmUntil;
         float _speed = 1f;
+        int _modalClosedFrame = -1;   // кадр закрытия модального окна: клавиша не должна «провалиться» в игру
 
         struct FloatingText { public Vector3 Pos; public string Text; public Color Color; public float Born; }
         readonly List<FloatingText> _floats = new List<FloatingText>();
@@ -48,6 +53,12 @@ namespace Echo7
 
         public void Open(UiWindow w)
         {
+            if (Game.Tutorial != null && !Game.Tutorial.WindowRevealed(w) && Window != w)
+            {
+                Game.Log?.Warn("Этот раздел откроется по ходу обучения.");
+                Game.Sound?.Play2D(Sfx.UiError, 0.6f);
+                return;
+            }
             var f = RequiredFeature(w);
             if (f.HasValue && !Game.Rank.IsUnlocked(f.Value))
             {
@@ -57,7 +68,7 @@ namespace Echo7
             }
             Window = Window == w ? UiWindow.None : w;
             _scroll = Vector2.zero;
-            if (Window == UiWindow.Build) Inspected = null;
+            if (Window == UiWindow.Build) { Inspected = null; AutoBuildTab(); }
             Game.Sound?.Play2D(Sfx.UiClick, 0.5f);
         }
 
@@ -69,7 +80,13 @@ namespace Echo7
             _demolishConfirmUntil = 0f;
         }
 
-        public void OpenCenterComms() => Game.Dialogue.Start(DialogueLibrary.CenterComms());
+        public void OpenCenterComms()
+        {
+            Game.Entry.SetFlag("comms_opened");
+            var tut = Game.Tutorial;
+            if (tut != null && tut.Active && tut.StepIndex <= 1) Game.Dialogue.Start(DialogueLibrary.TutorialComms());
+            else Game.Dialogue.Start(DialogueLibrary.CenterComms());
+        }
         public void OpenGlobalMap() => Open(UiWindow.GlobalMap);
 
         public void FloatText(Vector3 world, string text, Color color)
@@ -91,26 +108,42 @@ namespace Echo7
         {
             if (Game.State == GameState.GameOver) return;
             Paused = !Paused;
-            Time.timeScale = Paused ? 0f : _speed;
+            if (!Paused) _modalClosedFrame = Time.frameCount;
             Game.Sound?.Play2D(Sfx.UiClick, 0.5f);
         }
 
-        public void SetSpeed(float s)
+        public void SetSpeed(float s) { _speed = s; }
+
+        void LateUpdate()
         {
-            _speed = s;
-            if (!Paused && !(Game.Dialogue != null && Game.Dialogue.IsOpen)) Time.timeScale = s;
+            if (Game.State != GameState.Playing) return;
+            float target = HoldsTime ? 0f : _speed;
+            if (!Mathf.Approximately(Time.timeScale, target)) Time.timeScale = target;
         }
 
         void Update()
         {
             if (Game.State != GameState.Playing) return;
+            var tut = Game.Tutorial;
+            if (tut != null && tut.ModeSelectOpen)
+            {
+                if (InputBridge.KeyDown(GameKey.Alpha1)) { tut.ChooseTutorial(); _modalClosedFrame = Time.frameCount; }
+                else if (InputBridge.KeyDown(GameKey.Alpha2)) { tut.ChooseClassic(); _modalClosedFrame = Time.frameCount; }
+                return;
+            }
+            if (tut != null && tut.BriefingOpen)
+            {
+                if (InputBridge.KeyDown(GameKey.Space) || InputBridge.KeyDown(GameKey.Escape)) { tut.CloseBriefing(); _modalClosedFrame = Time.frameCount; }
+                return;
+            }
             var dlg = Game.Dialogue;
             if (dlg != null && dlg.IsOpen)
             {
-                for (int i = 0; i < 4; i++) if (InputBridge.KeyDown(GameKey.Alpha1 + i)) dlg.Choose(i);
-                if (InputBridge.KeyDown(GameKey.Escape)) dlg.Close();
+                for (int i = 0; i < 4; i++) if (InputBridge.KeyDown(GameKey.Alpha1 + i)) { dlg.Choose(i); if (!dlg.IsOpen) _modalClosedFrame = Time.frameCount; }
+                if (InputBridge.KeyDown(GameKey.Escape)) { dlg.Close(); _modalClosedFrame = Time.frameCount; }
                 return;
             }
+            if (_modalClosedFrame == Time.frameCount) return;
             if (InputBridge.KeyDown(GameKey.Escape))
             {
                 if (Game.Build.IsPlacing || Game.Build.CancelFrame == Time.frameCount) { /* BuildSystem сам отменит */ }
@@ -162,6 +195,7 @@ namespace Echo7
                 case UiWindow.Help: DrawHelpWindow(); break;
             }
             DrawToast();
+            DrawTutorialOverlays();
             if (Game.Dialogue != null && Game.Dialogue.IsOpen) DrawDialogue();
             if (Paused) DrawPause();
             if (Game.State == GameState.GameOver) DrawGameOver();
@@ -245,6 +279,7 @@ namespace Echo7
             var size = st.CalcSize(new GUIContent(pl.HoverLabel));
             r.width = size.x + 16;
             GUI.Box(r, GUIContent.none, UiSkin.PanelLight);
+            UiSkin.Fill(new Rect(r.x, r.y + 4, 2, r.height - 8), UiSkin.Cyan);
             GUI.Label(new Rect(r.x + 8, r.y + 3, r.width, 22), UiSkin.Col(pl.HoverLabel, UiSkin.Text), st);
         }
 
@@ -254,9 +289,10 @@ namespace Echo7
             if (log?.Toast == null || Time.unscaledTime > log.ToastUntil) return;
             var t = log.Toast.Value;
             float a = Mathf.Clamp01((log.ToastUntil - Time.unscaledTime) * 2f);
-            var r = new Rect(W / 2 - 380, 92, 760, 46);
+            var r = new Rect(W / 2 - 380, 104, 760, 46);
             var old = GUI.color; GUI.color = new Color(1, 1, 1, a);
-            GUI.Box(r, GUIContent.none, UiSkin.Panel);
+            UiSkin.Panel2(r);
+            UiSkin.Brackets(new Rect(r.x - 3, r.y - 3, r.width + 6, r.height + 6), MessageLog.ColorOf(t.Kind), 10f, 2f);
             var st = new GUIStyle(UiSkin.Label) { alignment = TextAnchor.MiddleCenter, fontSize = 16 };
             st.normal.textColor = MessageLog.ColorOf(t.Kind);
             GUI.Label(new Rect(r.x + 10, r.y + 4, r.width - 20, r.height - 8), t.Text, st);

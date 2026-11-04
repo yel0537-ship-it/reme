@@ -140,7 +140,7 @@ namespace Echo7
 
             if (load == null)
             {
-                PlaceStartingBase();
+                PlaceCoreBase();
                 StartingResources();
             }
             else SaveSystem.ApplyWorld(load);
@@ -170,26 +170,52 @@ namespace Echo7
             Game.Map = Child<GlobalMap>("GlobalMap");
             Game.Map.Init();
 
+            Game.Tutorial = Child<TutorialDirector>("Tutorial");
+            Game.Tutorial.Init();
+
             Game.Ui = Child<UiManager>("UI");
             Game.Ui.Init();
             Game.Save = new SaveSystem();
 
             Game.State = GameState.Playing;
-            Game.Fauna.Init();
 
             if (load == null)
             {
                 Game.Garrison.SpawnStarting(Game.World.Center + new Vector3(-8f, 0, -9f));
-                Game.Tasks.Init();
                 Game.Supply.Init();
-                Game.Log.Center("Аванпост «Эхо-7», говорит Центр. Специалист, вы назначены командиром. Укрепите периметр до наступления ночи.");
-                Game.Log.Info("Подсказка: F1 — справка. B — строительство, клик по залежи — добыча.");
+                switch (cfg.tutorial)
+                {
+                    case TutorialMode.Always: Game.Tutorial.ChooseTutorial(); break;
+                    case TutorialMode.Never: StartClassic(); break;
+                    default: Game.Tutorial.AskMode(); break;
+                }
             }
             else
             {
                 SaveSystem.ApplyState(load);
+                Game.Fauna.Init();
                 Game.Log.Info("Игра загружена.");
             }
+        }
+
+        bool _faunaStarted;
+
+        /// <summary>Вызывается, когда режим начала выбран (пролог или сразу в бой).</summary>
+        public void OnModeChosen()
+        {
+            if (_faunaStarted) return;
+            _faunaStarted = true;
+            Game.Fauna.Init();
+        }
+
+        /// <summary>Классический старт без обучения: база с периметром и турелью, сразу задачи Центра.</summary>
+        public void StartClassic()
+        {
+            PlaceClassicExtras();
+            Game.Tasks.Init();
+            OnModeChosen();
+            Game.Log.Center("Аванпост «Эхо-7», говорит Центр. Специалист, вы назначены командиром. Укрепите периметр до наступления ночи.");
+            Game.Log.Info("Подсказка: F1 — справка. B — строительство, клик по залежи — добыча.");
         }
 
         void DisableSceneCamerasAndLights()
@@ -200,7 +226,8 @@ namespace Echo7
                 if (l.type == LightType.Directional && !l.transform.IsChildOf(transform)) l.gameObject.SetActive(false);
         }
 
-        void PlaceStartingBase()
+        /// <summary>Ядро аванпоста — одинаково для пролога и классического старта.</summary>
+        void PlaceCoreBase()
         {
             var g = Game.Grid;
             var c = g.WorldToCell(Game.World.Center);
@@ -209,6 +236,14 @@ namespace Echo7
             b.PlaceInstant(StructureKind.Command, c + new Vector2Int(-7, -1), 0);
             b.PlaceInstant(StructureKind.Habitat, c + new Vector2Int(7, 1), 0);
             b.PlaceInstant(StructureKind.Storage, c + new Vector2Int(-6, 5), 0);
+        }
+
+        /// <summary>Готовые укрепления для старта без обучения.</summary>
+        void PlaceClassicExtras()
+        {
+            var g = Game.Grid;
+            var c = g.WorldToCell(Game.World.Center);
+            var b = Game.Build;
             b.PlaceInstant(StructureKind.MgTurret, c + new Vector2Int(-2, 8), 0);
             b.PlaceInstant(StructureKind.Pylon, c + new Vector2Int(5, -5), 0);   // в радиусе реактора (18 м)
             b.PlaceInstant(StructureKind.Pylon, c + new Vector2Int(2, 8), 0);    // питает ворота

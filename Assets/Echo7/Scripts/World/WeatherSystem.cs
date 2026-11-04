@@ -75,6 +75,7 @@ namespace Echo7
         void OnDay(int day)
         {
             if (!Game.Config.enableWeather || Current != WeatherKind.Clear) return;
+            if (Game.Tutorial != null && !Game.Tutorial.AllowWeather) { NextEventDay = Mathf.Max(NextEventDay, day + 2); return; }
             if (day < NextEventDay) return;
             // Цикл: пекло → (буря) → ливни; иногда миграция насекомых
             double r = _rnd.NextDouble();

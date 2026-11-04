@@ -108,7 +108,10 @@ namespace Echo7
 
         public void SendBonusPod(Cost contents, string reason) => SendPod(contents, reason, false);
 
-        void SendPod(Cost contents, string label, bool heavy, System.Action onLand = null)
+        /// <summary>Капсула со своим обработчиком посадки (сценарий, обучение). Возвращает точку посадки.</summary>
+        public Vector3 SendCustomPod(Cost contents, string label, System.Action onLand) => SendPod(contents, label, false, onLand);
+
+        Vector3 SendPod(Cost contents, string label, bool heavy, System.Action onLand = null)
         {
             var pad = StructureLookup.FirstOf(StructureKind.LandingPad) as LandingPad;
             Vector3 p;
@@ -119,6 +122,7 @@ namespace Echo7
                 p = FindDropPoint(c);
             }
             DropPod.Launch(p, contents, label, heavy, onLand);
+            return p;
         }
 
         static Vector3 FindDropPoint(Vector3 center)

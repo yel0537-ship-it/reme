@@ -55,9 +55,25 @@ namespace Echo7
             NextTutorial();
         }
 
+        bool _eventsHooked;
+
+        /// <summary>
+        /// Старт задач после пролога: обучающие KPI (периметр, титан, турель, ночь) уже пройдены в прологе,
+        /// поэтому Центр сразу выдаёт задачи на развитие.
+        /// </summary>
+        public void StartAfterOnboarding()
+        {
+            if (!_eventsHooked) InitEventsOnly();
+            if (_tutorialStep < 4) _tutorialStep = 4;
+            if (Active.Count == 0) { NextTutorial(); NextTutorial(); }
+            Refill();
+        }
+
         /// <summary>Подписка на события без выдачи стартовых задач (для загрузки).</summary>
         public void InitEventsOnly()
         {
+            if (_eventsHooked) return;
+            _eventsHooked = true;
             GameEvents.StructureCompleted += s => Progress(t => t.Type == TaskType.Build && (t.AnyWall ? (s.Def.Category == BuildCategory.Walls) : s.Def.Kind == t.BuildKind), 1);
             GameEvents.ResourceMined += (d, n) => Progress(t => t.Type == TaskType.Collect && t.Resource == d.Type, n);
             GameEvents.DayStarted += OnDay;

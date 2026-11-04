@@ -63,6 +63,22 @@ Game.Sound.Override(Sfx.Rifle, myClip);   // например, в Echo7Entry п�
 `Game.Entry.SetFlag("id")`, `HasFlag`, `ClearFlag`. Флаги сохраняются. Флаг `free_<StructureKind>` делает следующую
 постройку этого типа бесплатной (так работает орбитальная доставка).
 
+## Учебное задание пролога
+В `TutorialDirector.BuildSteps()` добавьте `new TutorialStep { … }` в нужное место списка:
+- `Title`, `Briefing` (rich text), `Objective`, `Hint`;
+- `Progress` — функция 0..1. Счётчик `_stepCounter` удобно пополнять из обработчиков событий, сверяясь со `StepIndex`;
+- `ProgressText` — например, «4/6»;
+- `Marker` — точка в мире или `null`;
+- `Reveal` — какие `HudPart` открыть, `Unlock` — какие постройки разрешить;
+- `HighlightWindow` / `HighlightKind` / `HighlightAbility` — что подсветить;
+- `Enter` — действие при начале шага (запланировать волну, прислать капсулу, перевести часы).
+
+Если вставляете шаг до «Первой ночи», сдвиньте константу `NightStep` и номера шагов в `WindowRevealed` и `OnStructureCompleted`.
+
+## Карточка «НОВОЕ»
+`Game.Tutorial.ShowTip("id", "Заголовок", "Текст")` из любой системы. Карточка покажется один раз за партию:
+флаг `tip_id` сохраняется. Для механик, у которых нет события, добавьте проверку в `TutorialDirector.PollTips()`.
+
 ## Проверка компиляции без Unity
 Скрипты не используют пакеты: только встроенные модули движка и (опционально) Input System. Их можно проверить
 `dotnet build`-проектом, который ссылается на сборки `UnityEngine.*Module.dll` (так проект проверялся при создании).

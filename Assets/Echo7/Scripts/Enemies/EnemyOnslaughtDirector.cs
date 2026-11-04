@@ -65,9 +65,10 @@ namespace Echo7
         void OnNight(int day)
         {
             if (day < Game.Config.firstNightWaveDay || _nightWaveDay == day) return;
+            if (Game.Tutorial != null && !Game.Tutorial.AllowNightWaves) return;
             _nightWaveDay = day;
             // ночная волна — через пару игровых часов после заката
-            float delay = 2f / Game.Clock.GameHoursPerSecond;
+            float delay = 2f / Game.Clock.BaseHoursPerSecond;
             float noiseK = 1f + Mathf.Clamp(Game.Noise.Level / 60f, 0f, 1.5f);
             Schedule(WaveTrigger.Night, Mathf.RoundToInt(BaseBudget() * 1.2f * noiseK), delay, "Ночная волна");
         }
@@ -89,6 +90,8 @@ namespace Echo7
 
             // 1) давление: шум + фон (растёт со временем без атак)
             float sinceLast = Time.time - _lastWaveTime;
+            bool unscripted = Game.Tutorial == null || Game.Tutorial.AllowRandomWaves;
+            if (!unscripted) { UpdateWaves(); return; }
             float baseline = (0.04f + Game.Clock.Day * 0.012f) * (night ? 1.8f : 1f);
             Pressure += dt * (noise.Level * 0.035f + baseline * Mathf.Clamp01(sinceLast / 180f));
 
@@ -110,6 +113,19 @@ namespace Echo7
                 Pressure = 0f;
             }
 
+            UpdateWaves();
+        }
+
+        /// <summary>Пауза в случайных атаках (после обучения, после крупных событий).</summary>
+        public void Grace(float seconds)
+        {
+            _lastWaveTime = Time.time + seconds - 120f;
+            _lastSpikeTime = Time.time + seconds - 150f;
+            Pressure = 0f;
+        }
+
+        void UpdateWaves()
+        {
             // 4) спавн и завершение волн
             for (int i = Waves.Count - 1; i >= 0; i--)
             {

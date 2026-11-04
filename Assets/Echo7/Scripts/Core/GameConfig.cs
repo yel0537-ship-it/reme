@@ -26,6 +26,10 @@ namespace Echo7
         [Tooltip("Первая ночь, когда приходит гарантированная волна.")]
         public int firstNightWaveDay = 1;
 
+        [Header("Обучение")]
+        [Tooltip("Ask — спросить при новой игре, Always — всегда пролог, Never — сразу полная база.")]
+        public TutorialMode tutorial = TutorialMode.Ask;
+
         [Header("Системы")]
         public bool enableFauna = true;
         public bool enableWeather = true;

@@ -47,6 +47,7 @@ namespace Echo7
         public static DialogueSystem Dialogue;
         public static VIPVisitorManager Vip;
         public static GlobalMap Map;
+        public static TutorialDirector Tutorial;
 
         // Сервисы
         public static MessageLog Log;
@@ -67,7 +68,7 @@ namespace Echo7
             Player = null;
             Bank = null; Supply = null; Power = null; Build = null; Construction = null; Defense = null;
             Noise = null; Enemies = null; Onslaught = null; Fauna = null;
-            Rank = null; Skills = null; Tasks = null; Garrison = null; Dialogue = null; Vip = null; Map = null;
+            Rank = null; Skills = null; Tasks = null; Garrison = null; Dialogue = null; Vip = null; Map = null; Tutorial = null;
             Log = null; Sound = null; Fx = null; Ui = null; Save = null;
             GameEvents.Reset();
             Registry.Reset();

@@ -63,6 +63,7 @@ namespace Echo7
         public string LockReason(BuildingDef def)
         {
             if (!def.Buildable) return "Нельзя построить";
+            if (Game.Tutorial != null && !Game.Tutorial.IsBuildUnlocked(def.Kind)) return "Откроется по ходу обучения";
             if (!string.IsNullOrEmpty(def.RequiredFlag) && !Game.Entry.HasFlag(def.RequiredFlag)) return "Нужен уникальный чертёж";
             if (def.RequiredFeature.HasValue && !Game.Rank.IsUnlocked(def.RequiredFeature.Value)) return Game.Rank.LockReason(def.RequiredFeature.Value);
             if (!Game.Rank.IsAtLeast(def.MinRank)) return $"Требуется ранг: {PlayerRankManager.RankName(def.MinRank)}";

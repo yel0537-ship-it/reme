@@ -58,6 +58,7 @@ namespace Echo7
         void OnHour(int hour)
         {
             if (!Game.Config.enableVipVisits) return;
+            if (Game.Tutorial != null && !Game.Tutorial.AllowVip) { NextVisitDay = Mathf.Max(NextVisitDay, Game.Clock.Day + 2); return; }
             if (Pending != null && !Pending.Resolved && Game.Clock.TotalHours >= Pending.ResolveAtHour) Resolve(Pending);
             // гость не дождался встречи — улетает, считая это отказом
             if (Current != null && _arrivedHour >= 0f && Game.Clock.TotalHours - _arrivedHour > 20f)

@@ -13,7 +13,11 @@ namespace Echo7
         public Light Sun { get; private set; }
         public bool IsNight => Hour >= 20f || Hour < 5f;
         public float DayLengthSeconds => Mathf.Max(60f, Game.Config.dayLengthMinutes * 60f);
-        public float GameHoursPerSecond => 24f / DayLengthSeconds;
+        /// <summary>Скорость хода времени; 0, пока обучение держит время остановленным.</summary>
+        public float GameHoursPerSecond => Frozen ? 0f : BaseHoursPerSecond;
+        /// <summary>Номинальная скорость (для пересчёта «игровые часы → секунды»).</summary>
+        public float BaseHoursPerSecond => 24f / DayLengthSeconds;
+        public bool Frozen => Game.Tutorial != null && Game.Tutorial.ClockFrozen;
         /// <summary>Абсолютное игровое время в часах с начала партии.</summary>
         public float TotalHours => (Day - 1) * 24f + Hour;
         /// <summary>0 ночью, 1 в полдень — для солнечных панелей.</summary>

@@ -44,6 +44,8 @@ namespace Echo7
         public int vipNextDay;
         public bool mineEstablished;
         public float reactorBonus;
+        public bool prologueActive;
+        public int prologueStep;
     }
 
     /// <summary>
@@ -111,6 +113,8 @@ namespace Echo7
                 vipNextDay = Game.Vip.NextVisitDay,
                 mineEstablished = Game.Map.Get("mine")?.Established ?? false,
                 reactorBonus = Game.Reactor != null ? Game.Reactor.BonusOutput : 0f,
+                prologueActive = Game.Tutorial != null && Game.Tutorial.Active,
+                prologueStep = Game.Tutorial != null ? Game.Tutorial.StepIndex : 0,
             };
             foreach (var kv in Game.Skills.Snapshot()) d.skills.Add(new SkillEntry { id = (int)kv.Key, level = kv.Value });
             foreach (var t in ResourceBank.All) d.resources.Add(new ResEntry { type = (int)t, amount = Game.Bank.Exact(t) });
@@ -218,6 +222,7 @@ namespace Echo7
 
             Game.Tasks.Restore(d.tasks, d.tasksCompleted, d.tasksFailed, d.tutorialStep);
             Game.Tasks.InitEventsOnly();
+            Game.Tutorial?.Restore(d.prologueActive, d.prologueStep);
             Game.Supply.Init();
             Game.Supply.Restore(d.nextDelivery, (SupplyPriority)d.supplyPriority, d.supplySkip);
             Game.Player.ApplySkillBonuses();

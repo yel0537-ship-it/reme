@@ -15,7 +15,8 @@ namespace Echo7
         {
             if (!Game.Config.enableFauna) return;
             for (int i = 0; i < 4; i++) SpawnHerd();
-            for (int i = 0; i < 2; i++) SpawnStalker();
+            if (Game.Tutorial == null || Game.Tutorial.AllowPredators)
+                for (int i = 0; i < 2; i++) SpawnStalker();
         }
 
         void Update()
@@ -35,7 +36,7 @@ namespace Echo7
             int grazerCap = Mathf.RoundToInt(Mathf.Lerp(6f, 20f, green));
             int stalkerCap = (Game.Clock.IsNight ? 5 : 2) + Game.Clock.Day / 4;
             if (grazers < grazerCap) SpawnHerd();
-            if (stalkers < stalkerCap) SpawnStalker();
+            if (stalkers < stalkerCap && (Game.Tutorial == null || Game.Tutorial.AllowPredators)) SpawnStalker();
         }
 
         Vector3 RandomWildPoint(float minDistFromBase)
