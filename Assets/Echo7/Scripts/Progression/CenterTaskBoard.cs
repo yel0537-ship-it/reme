@@ -27,6 +27,8 @@ namespace Echo7
     /// <summary>
     /// Задачи (KPI) от Центра. Выполнение → очки ранга, репутация, внеплановые поставки.
     /// Провал к сроку → минус репутация и урезанные поставки.
+    /// Шаблоны задач и правила доски — в ассете <see cref="TaskBalance"/> (Resources/Echo7Balance/Tasks);
+    /// без ассета — значения из кода (TaskBalance.ResetToCode).
     /// </summary>
     public class CenterTaskBoard
     {
@@ -40,7 +42,11 @@ namespace Echo7
         int _moraleHours, _energyHours;
         readonly System.Random _rnd;
 
-        public int MaxActive => Game.Rank.Current >= Rank.Captain ? 4 : 3;
+        TaskBalance _balance;
+        /// <summary>Данные задач. Ассет читается при каждой выдаче, поэтому правка во время Play действует со следующей задачи.</summary>
+        public TaskBalance Balance => _balance != null ? _balance : (_balance = BalanceData.LoadOrDefault<TaskBalance>(TaskBalance.File));
+
+        public int MaxActive => Balance.MaxActiveFor(Game.Rank.Current);
         public bool CanDecline => Game.Rank.IsUnlocked(Feature.CenterVoice) && _lastDeclineDay != Game.Clock.Day;
 
         public CenterTaskBoard(int seed)
@@ -64,7 +70,8 @@ namespace Echo7
         public void StartAfterOnboarding()
         {
             if (!_eventsHooked) InitEventsOnly();
-            if (_tutorialStep < 4) _tutorialStep = 4;
+            int skip = Mathf.Min(Balance.skipAfterPrologue, Balance.starter.Count);
+            if (_tutorialStep < skip) _tutorialStep = skip;
             if (Active.Count == 0) { NextTutorial(); NextTutorial(); }
             Refill();
         }
@@ -102,9 +109,9 @@ namespace Echo7
         void OnHour(int h)
         {
             // длительные KPI проверяются раз в игровой час
-            bool moraleOk = Game.Garrison != null && Game.Garrison.AverageMorale >= 60f;
+            bool moraleOk = Game.Garrison != null && Game.Garrison.AverageMorale >= Balance.moraleThreshold;
             _moraleHours = moraleOk ? _moraleHours + 1 : 0;
-            bool energyOk = Game.Power != null && Game.Power.Balance >= 10f;
+            bool energyOk = Game.Power != null && Game.Power.Balance >= Balance.energySurplusThreshold;
             _energyHours = energyOk ? _energyHours + 1 : 0;
             foreach (var t in Active.ToArray())
             {
@@ -124,7 +131,7 @@ namespace Echo7
                 t.Failed = true;
                 FailedCount++;
                 RecentKpi = Mathf.Max(-3, RecentKpi - 1);
-                Game.Rank.AddReputation(-6, $"провалена задача «{t.Title}»");
+                Game.Rank.AddReputation(-Balance.failReputationPenalty, $"провалена задача «{t.Title}»");
                 Game.Log?.Center($"Центр: задача «{t.Title}» провалена. Следующая поставка будет урезана.");
                 Active.Remove(t);
                 History.Add(t);
@@ -147,7 +154,8 @@ namespace Echo7
             {
                 Game.Supply?.SendBonusPod(t.RewardSupplies, "внеплановая поставка за выполнение задачи");
             }
-            if (CompletedCount % 2 == 0)
+            int perPoint = Balance.tasksPerSkillPoint;
+            if (perPoint > 0 && CompletedCount % perPoint == 0)
             {
                 Game.Skills.AddPoints(1);
                 Game.Log?.Info("Получено очко навыков.");
@@ -162,7 +170,9 @@ namespace Echo7
             while (Active.Count < MaxActive && guard++ < 6)
             {
                 if (_tutorialStep < TutorialCount) { NextTutorial(); continue; }
-                Active.Add(Generate());
+                var t = Generate();
+                if (t == null) break;
+                Active.Add(t);
             }
         }
 
@@ -172,66 +182,51 @@ namespace Echo7
             _lastDeclineDay = Game.Clock.Day;
             Active.Remove(t);
             Game.Log?.Center($"Центр согласовал отказ от задачи «{t.Title}» (право голоса капитана).");
-            Active.Add(Generate());
+            var n = Generate();
+            if (n != null) Active.Add(n);
         }
 
-        // ------------------------------------------------------------ обучение
+        // ------------------------------------------------------------ стартовые задачи
 
-        const int TutorialCount = 6;
+        int TutorialCount => Balance.starter.Count;
 
         void NextTutorial()
         {
             int d = Game.Clock != null ? Game.Clock.Day : 1;
-            CenterTask t = null;
-            switch (_tutorialStep)
-            {
-                case 0: t = new CenterTask { Title = "Периметр", Description = "Постройте 8 секций стен или ограждений вокруг реактора. [B] — меню, протяжка мышью.", Type = TaskType.Build, AnyWall = true, Target = 8, DeadlineDay = d + 2, RewardRp = 25, RewardRep = 3, RewardSupplies = new Cost((ResourceType.Alloys, 25)) }; break;
-                case 1: t = new CenterTask { Title = "Местные ресурсы", Description = "Центр не прислал титан. Добудьте 20 титана вручную (клик по залежи) или дронами.", Type = TaskType.Collect, Resource = ResourceType.Titanium, Target = 20, DeadlineDay = d + 2, RewardRp = 30, RewardRep = 2, RewardSupplies = new Cost((ResourceType.Ammo, 60)) }; break;
-                case 2: t = new CenterTask { Title = "Огневая точка", Description = "Постройте ещё один пулемётный узел и назначьте расчёт в окне гарнизона [G].", Type = TaskType.Build, BuildKind = StructureKind.MgTurret, Target = 1, DeadlineDay = d + 2, RewardRp = 25, RewardRep = 2 }; break;
-                case 3: t = new CenterTask { Title = "Пережить ночь", Description = "Удержите аванпост до рассвета.", Type = TaskType.SurviveNights, Target = 1, RewardRp = 35, RewardRep = 4, RewardSupplies = new Cost((ResourceType.Rations, 20), (ResourceType.Ammo, 40)) }; break;
-                case 4: t = new CenterTask { Title = "Автоматизация", Description = "Постройте дронпорт — дроны сами носят местные ресурсы и шумят меньше бура.", Type = TaskType.Build, BuildKind = StructureKind.DroneBay, Target = 1, DeadlineDay = d + 3, RewardRp = 30, RewardRep = 2 }; break;
-                case 5: t = new CenterTask { Title = "Энергобаланс", Description = "Держите профицит энергии ≥10 в течение 6 часов (солнечные панели, узлы).", Type = TaskType.EnergySurplus, Target = 6, DeadlineDay = d + 3, RewardRp = 30, RewardRep = 2 }; break;
-            }
+            int r = Game.Rank != null ? (int)Game.Rank.Current : 0;
+            var list = Balance.starter;
+            CenterTask t = _tutorialStep >= 0 && _tutorialStep < list.Count ? list[_tutorialStep].Create(d, r) : null;
             _tutorialStep++;
             if (t != null) { Active.Add(t); Game.Log?.Center($"Новая задача Центра: «{t.Title}»"); }
         }
 
         // ------------------------------------------------------------ генератор
 
+        /// <summary>Случайная задача из пула: по весам, с учётом ранга, без повторов уже активных. null — выдать нечего.</summary>
         CenterTask Generate()
         {
             int d = Game.Clock.Day;
             var rank = Game.Rank.Current;
-            int r = (int)rank;
-            var pool = new List<System.Func<CenterTask>>
+            var candidates = new List<TaskTemplate>();
+            float total = 0f;
+            foreach (var tpl in Balance.pool)
             {
-                () => new CenterTask { Title = "Отразить натиск", Description = "Отразите волны фауны.", Type = TaskType.RepelWaves, Target = 2 + r / 2, DeadlineDay = d + 3, RewardRp = 40 + r * 10, RewardRep = 3 },
-                () => new CenterTask { Title = "Зачистка", Description = "Уничтожьте враждебных особей.", Type = TaskType.KillHostiles, Target = 25 + r * 10, DeadlineDay = d + 3, RewardRp = 35 + r * 8, RewardRep = 2, RewardSupplies = new Cost((ResourceType.Ammo, 80)) },
-                () => new CenterTask { Title = "Охота", Description = "Пайков мало. Добудьте мясо рогачей.", Type = TaskType.Hunt, Target = 3, DeadlineDay = d + 2, RewardRp = 20, RewardRep = 1, RewardSupplies = new Cost((ResourceType.Rations, 15)) },
-                () => new CenterTask { Title = "Кристаллы для лабораторий", Description = "Добудьте кристаллы.", Type = TaskType.Collect, Resource = ResourceType.Crystals, Target = 20 + r * 10, DeadlineDay = d + 3, RewardRp = 40 + r * 10, RewardRep = 3, RewardSupplies = new Cost((ResourceType.Credits, 60)) },
-                () => new CenterTask { Title = "Титан для верфей", Description = "Добудьте титан.", Type = TaskType.Collect, Resource = ResourceType.Titanium, Target = 30 + r * 10, DeadlineDay = d + 3, RewardRp = 35 + r * 10, RewardRep = 3, RewardSupplies = new Cost((ResourceType.Alloys, 40)) },
-                () => new CenterTask { Title = "Боевой дух", Description = "Мораль гарнизона ≥ 60 в течение 8 часов.", Type = TaskType.KeepMorale, Target = 8, DeadlineDay = d + 3, RewardRp = 30, RewardRep = 3 },
-                () => new CenterTask { Title = "Запас воды", Description = "Накопите 120 воды перед сезоном пекла.", Type = TaskType.Stockpile, Resource = ResourceType.Water, Target = 120, DeadlineDay = d + 3, RewardRp = 30, RewardRep = 2 },
-                () => new CenterTask { Title = "Укрепление", Description = "Постройте ещё стен.", Type = TaskType.Build, AnyWall = true, Target = 10 + r * 4, DeadlineDay = d + 2, RewardRp = 25 + r * 5, RewardRep = 2, RewardSupplies = new Cost((ResourceType.Alloys, 30)) },
-                () => new CenterTask { Title = "Глубинная разведка", Description = "Подорвите завал одной из пещер — там богатые жилы.", Type = TaskType.OpenCave, Target = 1, DeadlineDay = d + 4, RewardRp = 50, RewardRep = 3 },
-            };
-            if (rank >= Rank.Lieutenant)
-            {
-                pool.Add(() => new CenterTask { Title = "Геологоразведка", Description = "Найдите скрытые залежи геологическим зондом.", Type = TaskType.Survey, Target = 1, DeadlineDay = d + 3, RewardRp = 40, RewardRep = 3 });
-                pool.Add(() => new CenterTask { Title = "Лазерный рубеж", Description = "Постройте лазерный излучатель против бронированных тварей.", Type = TaskType.Build, BuildKind = StructureKind.LaserTurret, Target = 1, DeadlineDay = d + 3, RewardRp = 40, RewardRep = 2 });
+                if (tpl == null || tpl.weight <= 0f || rank < tpl.minRank) continue;
+                if (Active.Exists(a => a.Title == tpl.title)) continue;
+                candidates.Add(tpl);
+                total += tpl.weight;
             }
-            if (rank >= Rank.Captain)
-                pool.Add(() => new CenterTask { Title = "Посадочная площадка", Description = "Подготовьте приём орбитальных грузов.", Type = TaskType.Build, BuildKind = StructureKind.LandingPad, Target = 1, DeadlineDay = d + 4, RewardRp = 60, RewardRep = 4 });
-            if (rank >= Rank.Major)
-                pool.Add(() => new CenterTask { Title = "Космопорт", Description = "Постройте космопорт для полётов на орбиту.", Type = TaskType.Build, BuildKind = StructureKind.Spaceport, Target = 1, DeadlineDay = d + 6, RewardRp = 120, RewardRep = 6 });
-
-            // не дублируем уже активные задачи
-            for (int i = 0; i < 10; i++)
+            if (candidates.Count == 0) return null;
+            double roll = _rnd.NextDouble() * total;
+            var pick = candidates[candidates.Count - 1];
+            foreach (var c in candidates)
             {
-                var t = pool[_rnd.Next(pool.Count)]();
-                if (!Active.Exists(a => a.Title == t.Title)) { Game.Log?.Center($"Новая задача Центра: «{t.Title}»"); return t; }
+                roll -= c.weight;
+                if (roll <= 0) { pick = c; break; }
             }
-            return pool[0]();
+            var t = pick.Create(d, (int)rank);
+            Game.Log?.Center($"Новая задача Центра: «{t.Title}»");
+            return t;
         }
 
         public void Restore(List<CenterTask> active, int completed, int failed, int tutorialStep)

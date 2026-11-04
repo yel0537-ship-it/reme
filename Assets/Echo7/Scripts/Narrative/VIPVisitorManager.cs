@@ -3,8 +3,6 @@ using UnityEngine;
 
 namespace Echo7
 {
-    public enum VipType { Inspector, General, Curator }
-
     /// <summary>Запрос высокого чина: что он хочет получить от аванпоста.</summary>
     public class VipRequest
     {
@@ -19,7 +17,7 @@ namespace Echo7
 
     public class VipVisit
     {
-        public VipType Type;
+        public string Portrait = "?";
         public string Name;
         public string Title;
         public string Mission;
@@ -30,12 +28,15 @@ namespace Echo7
         public float ResolveAtHour;
         public bool Resolved;
         public string RewardFlag;
+        public string RewardMessage;
+        public int RewardCredits;
     }
 
     /// <summary>
     /// Визиты высоких чинов. Челнок садится на площадку (или в зону высадки), инспектор/генерал/куратор
     /// просит лучшую броню, медиков, транспорт. Дать — репутация и уникальные награды; отказать или дать хлам —
     /// падение репутации, урезанные поставки; гибель чина — военный трибунал и понижение в ранге.
+    /// Визиты, расписание и последствия — в ассете <see cref="VipBalance"/> (Resources/Echo7Balance/Vips).
     /// </summary>
     public class VIPVisitorManager : MonoBehaviour
     {
@@ -43,6 +44,9 @@ namespace Echo7
         public VipVisit Pending { get; private set; }   // улетел на миссию, ждём исход
         public VipNpc VipActor { get; private set; }
         public int NextVisitDay { get; private set; } = 3;
+        VipBalance _balance;
+        /// <summary>Данные визитов. Читаются при каждом событии — правка во время Play действует со следующего.</summary>
+        public VipBalance Balance => _balance != null ? _balance : (_balance = BalanceData.LoadOrDefault<VipBalance>(VipBalance.File));
         Shuttle _shuttle;
         float _arrivedHour = -1f;
         readonly System.Random _rnd = new System.Random(77);
@@ -50,6 +54,7 @@ namespace Echo7
 
         public void Init(int seed)
         {
+            NextVisitDay = Balance.firstVisitDay;
             GameEvents.HourPassed += OnHour;
         }
 
@@ -61,22 +66,23 @@ namespace Echo7
             if (Game.Tutorial != null && !Game.Tutorial.AllowVip) { NextVisitDay = Mathf.Max(NextVisitDay, Game.Clock.Day + 2); return; }
             if (Pending != null && !Pending.Resolved && Game.Clock.TotalHours >= Pending.ResolveAtHour) Resolve(Pending);
             // гость не дождался встречи — улетает, считая это отказом
-            if (Current != null && _arrivedHour >= 0f && Game.Clock.TotalHours - _arrivedHour > 20f)
+            if (Current != null && _arrivedHour >= 0f && Game.Clock.TotalHours - _arrivedHour > Balance.patienceHours)
             {
                 Game.Log?.Center($"{Current.Title} {Current.Name} не дождался(ась) встречи с командиром и улетает.");
                 foreach (var q in Current.Requests) if (q.Choice < 0) q.Choice = 2;
                 Depart(Current);
             }
-            if (Current == null && Pending == null && Game.Clock.Day >= NextVisitDay && hour == 10) BeginVisit();
+            if (Current == null && Pending == null && Game.Clock.Day >= NextVisitDay && hour == Balance.arrivalHour) BeginVisit();
         }
 
         public void ForceVisit() { if (Current == null) BeginVisit(); }
 
         void BeginVisit()
         {
+            var entry = PickVisit();
+            if (entry == null) { NextVisitDay = Game.Clock.Day + 1; return; }
             _visitCount++;
-            var type = (VipType)(_visitCount % 3 == 1 ? 0 : _rnd.Next(3));
-            Current = MakeVisit(type);
+            Current = entry.Create((int)Game.Rank.Current);
             _arrivedHour = Game.Clock.TotalHours;
             var pad = StructureLookup.FirstOf(StructureKind.LandingPad) as LandingPad;
             var at = pad != null && pad.IsBuilt ? pad.PadPoint : Game.World.LandingZone;
@@ -88,36 +94,26 @@ namespace Echo7
             Game.Log?.Center($"Центр: к вам направляется {Current.Title.ToLower()} {Current.Name}. Встречайте.");
         }
 
-        VipVisit MakeVisit(VipType type)
+        /// <summary>Выбор визита: первый — первая запись (если так задано), дальше — случайно по весам среди доступных по рангу.</summary>
+        VipVisitEntry PickVisit()
         {
-            var v = new VipVisit { Type = type };
-            int r = (int)Game.Rank.Current;
-            switch (type)
+            var b = Balance;
+            if (b.visits.Count == 0) return null;
+            if (_visitCount == 0 && b.firstVisitIsFirstEntry && b.visits[0] != null) return b.visits[0];
+            var rank = Game.Rank.Current;
+            float total = 0f;
+            foreach (var e in b.visits) if (e != null && e.weight > 0f && rank >= e.minRank) total += e.weight;
+            if (total <= 0f) return null;
+            double roll = _rnd.NextDouble() * total;
+            VipVisitEntry last = null;
+            foreach (var e in b.visits)
             {
-                case VipType.Inspector:
-                    v.Title = "Инспектор снабжения"; v.Name = "Ворошилова";
-                    v.Mission = "Мне нужно добраться до заброшенного склада экспедиции на северном плато. Там остались документы, которые не должны попасть к конкурентам.";
-                    v.RewardFlag = "market_closed";
-                    v.Requests.Add(new VipRequest { Name = "Лучшая броня", Description = "Комплект усиленной брони", BestCost = new Cost((ResourceType.Titanium, 15 + r * 5), (ResourceType.Alloys, 20)), JunkCost = new Cost((ResourceType.Alloys, 6)) });
-                    v.Requests.Add(new VipRequest { Name = "Транспорт", Description = "Вездеход с запасом хода", BestCost = new Cost((ResourceType.Alloys, 35), (ResourceType.Silicon, 8), (ResourceType.Crystals, 4)), JunkCost = new Cost((ResourceType.Alloys, 10)) });
-                    break;
-                case VipType.General:
-                    v.Title = "Генерал"; v.Name = "Арсеньев";
-                    v.Mission = "Разведка донесла о гнезде «танков» в каньоне. Я лично поведу ударную группу. Аванпост обязан обеспечить операцию.";
-                    v.RewardFlag = "bp_shield";
-                    v.Requests.Add(new VipRequest { Name = "Боеприпасы", Description = "Полный боекомплект группы", BestCost = new Cost((ResourceType.Ammo, 120 + r * 30)), JunkCost = new Cost((ResourceType.Ammo, 30)) });
-                    v.Requests.Add(new VipRequest { Name = "Медик", Description = "Лучший медик аванпоста уходит с группой", NeedsNpc = true, NpcRole = NpcRole.Medic, BestCost = new Cost((ResourceType.Medkits, 3)), JunkCost = new Cost((ResourceType.Medkits, 1)) });
-                    v.Requests.Add(new VipRequest { Name = "Лучшая броня", Description = "Броня для штурмовиков", BestCost = new Cost((ResourceType.Titanium, 20 + r * 5)), JunkCost = new Cost((ResourceType.Alloys, 8)) });
-                    break;
-                default:
-                    v.Title = "Научный куратор"; v.Name = "Делакруа";
-                    v.Mission = "В пещерах найден артефакт неизвестной цивилизации. Его нужно доставить на орбитальную станцию в целости.";
-                    v.RewardFlag = "artifact_research";
-                    v.Requests.Add(new VipRequest { Name = "Охрана", Description = "Боец сопровождения", NeedsNpc = true, NpcRole = NpcRole.Soldier, BestCost = new Cost((ResourceType.Ammo, 40)), JunkCost = new Cost((ResourceType.Ammo, 10)) });
-                    v.Requests.Add(new VipRequest { Name = "Транспорт", Description = "Защищённый контейнер и вездеход", BestCost = new Cost((ResourceType.Alloys, 30), (ResourceType.Crystals, 6)), JunkCost = new Cost((ResourceType.Alloys, 8)) });
-                    break;
+                if (e == null || e.weight <= 0f || rank < e.minRank) continue;
+                last = e;
+                roll -= e.weight;
+                if (roll <= 0) return e;
             }
-            return v;
+            return last;
         }
 
         // ------------------------------------------------------------ диалог
@@ -131,7 +127,7 @@ namespace Echo7
             var node = new DialogueNode
             {
                 Speaker = $"{v.Title} {v.Name}",
-                Portrait = v.Type == VipType.General ? "★" : v.Type == VipType.Inspector ? "И" : "К",
+                Portrait = v.Portrait,
                 PortraitColor = VipColor,
                 Text = $"{v.Mission}\n\nМне нужно от вас:\n" + RequestList(v)
             };
@@ -200,11 +196,12 @@ namespace Echo7
 
         void Depart(VipVisit v)
         {
+            var b = Balance;
             float q = 0f;
             int refused = 0;
             foreach (var r in v.Requests)
             {
-                q += r.Choice == 0 ? 1f : r.Choice == 1 ? 0.3f : 0f;
+                q += r.Choice == 0 ? 1f : r.Choice == 1 ? b.junkQuality : 0f;
                 if (r.Choice == 2) refused++;
             }
             v.Quality = v.Requests.Count > 0 ? q / v.Requests.Count : 0f;
@@ -212,21 +209,21 @@ namespace Echo7
 
             if (v.Refused)
             {
-                Game.Rank.AddReputation(-14, $"отказ {v.Title.ToLower()}у");
+                Game.Rank.AddReputation(-b.refuseReputationPenalty, $"отказ {v.Title.ToLower()}у");
                 Game.Supply.SkipNext++;
                 Game.Log?.Center($"{v.Title} {v.Name} улетает ни с чем. «Я доложу о вашем отношении, офицер».");
             }
-            else if (v.Quality < 0.5f)
+            else if (v.Quality < b.stingyQuality)
             {
-                Game.Rank.AddReputation(-5, "скупость при обеспечении миссии");
+                Game.Rank.AddReputation(-b.stingyReputationPenalty, "скупость при обеспечении миссии");
                 Game.Log?.Center($"{v.Title} {v.Name} с недовольным видом забирает выданное.");
             }
             else
             {
-                Game.Rank.AddReputation(4, "обеспечение миссии");
+                Game.Rank.AddReputation(b.satisfiedReputation, "обеспечение миссии");
                 Game.Log?.Center($"{v.Title} {v.Name}: «Отличная работа, аванпост. Я этого не забуду».");
             }
-            v.ResolveAtHour = Game.Clock.TotalHours + 24f + _rnd.Next(12);
+            v.ResolveAtHour = Game.Clock.TotalHours + Mathf.Lerp(b.missionHoursMin, Mathf.Max(b.missionHoursMin, b.missionHoursMax), (float)_rnd.NextDouble());
             Pending = v;
             Current = null;
             _arrivedHour = -1f;
@@ -238,33 +235,31 @@ namespace Echo7
                 if (_shuttle != null) _shuttle.TakeOff();
                 _shuttle = null;
             });
-            NextVisitDay = Game.Clock.Day + 3 + _rnd.Next(3);
+            int minD = Mathf.Max(1, b.intervalMinDays), maxD = Mathf.Max(minD, b.intervalMaxDays);
+            NextVisitDay = Game.Clock.Day + minD + _rnd.Next(maxD - minD + 1);
         }
 
         /// <summary>Исход миссии высокого чина.</summary>
         void Resolve(VipVisit v)
         {
+            var b = Balance;
             v.Resolved = true;
             Pending = null;
-            float success = 0.3f + 0.65f * v.Quality;
+            float success = Mathf.Clamp01(b.successBase + b.successPerQuality * v.Quality);
             bool ok = _rnd.NextDouble() < success;
             var returnAt = Game.World.LandingZone;
             if (ok)
             {
-                int rep = Mathf.RoundToInt(6 + 14 * v.Quality);
+                int rep = Mathf.RoundToInt(b.successReputationBase + b.successReputationPerQuality * v.Quality);
                 Game.Rank.AddReputation(rep, $"успех миссии: {v.Title.ToLower()} {v.Name}");
-                Game.Rank.AddPoints(Mathf.RoundToInt(30 + 50 * v.Quality), "благодарность высокого чина");
-                if (v.Quality >= 0.7f && !string.IsNullOrEmpty(v.RewardFlag))
+                Game.Rank.AddPoints(Mathf.RoundToInt(b.successRankPointsBase + b.successRankPointsPerQuality * v.Quality), "благодарность высокого чина");
+                if (v.Quality >= b.rewardQuality && (!string.IsNullOrEmpty(v.RewardFlag) || v.RewardCredits > 0))
                 {
-                    Game.Entry.SetFlag(v.RewardFlag);
-                    switch (v.RewardFlag)
-                    {
-                        case "bp_shield": Game.Log?.Center("Награда: уникальный чертёж «Генератор щита» (меню строительства → Оборона)."); break;
-                        case "market_closed": Game.Log?.Center("Награда: доступ к закрытому рынку орбитальной станции."); break;
-                        case "artifact_research": Game.Bank.Add(ResourceType.Credits, 150, true); Game.Log?.Center("Награда: исследовательский грант — 150 кредитов."); break;
-                    }
+                    if (!string.IsNullOrEmpty(v.RewardFlag)) Game.Entry.SetFlag(v.RewardFlag);
+                    if (v.RewardCredits > 0) Game.Bank.Add(ResourceType.Credits, v.RewardCredits, true);
+                    if (!string.IsNullOrEmpty(v.RewardMessage)) Game.Log?.Center(v.RewardMessage);
                 }
-                foreach (var n in v.LentNpcs) if (n != null) { n.ReturnFromAway(returnAt); n.AddMorale(15f); Game.Log?.Info($"{n.DisplayName} вернулся(ась) с миссии."); }
+                foreach (var n in v.LentNpcs) if (n != null) { n.ReturnFromAway(returnAt); n.AddMorale(b.lentNpcMoraleOnSuccess); Game.Log?.Info($"{n.DisplayName} вернулся(ась) с миссии."); }
                 Game.Log?.Center($"Миссия «{v.Title} {v.Name}» успешна.");
             }
             else
@@ -273,15 +268,15 @@ namespace Echo7
                 foreach (var n in v.LentNpcs)
                 {
                     if (n == null) continue;
-                    if (_rnd.NextDouble() < 0.5) { n.ReturnFromAway(returnAt); n.AddMorale(-20f); Game.Log?.Warn($"{n.DisplayName} вернулся(ась) — единственный(ая) выживший(ая)."); }
+                    if (_rnd.NextDouble() < b.survivorChance) { n.ReturnFromAway(returnAt); n.AddMorale(b.survivorMorale); Game.Log?.Warn($"{n.DisplayName} вернулся(ась) — единственный(ая) выживший(ая)."); }
                     else { n.ReturnFromAway(returnAt); n.Health.TakeDamage(new DamageInfo(9999f, DamageType.Melee, n.transform.position, Faction.Hostile)); }
                 }
-                if (v.Quality < 0.5f || v.Refused)
+                if (v.Quality < b.tribunalQuality || v.Refused)
                 {
                     Game.Rank.Demote($"гибель {v.Title.ToLower()}а {v.Name} при недостаточном обеспечении миссии");
-                    Game.Rank.AddReputation(-20, "трибунал");
+                    Game.Rank.AddReputation(-b.tribunalReputationPenalty, "трибунал");
                 }
-                else Game.Rank.AddReputation(-4, "гибель высокого чина (обеспечение было достаточным)");
+                else Game.Rank.AddReputation(-b.failReputationPenalty, "гибель высокого чина (обеспечение было достаточным)");
             }
         }
 

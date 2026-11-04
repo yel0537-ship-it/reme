@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Echo7
 {
     [Serializable] public class ResEntry { public int type; public float amount; }
-    [Serializable] public class SkillEntry { public int id; public int level; }
+    [Serializable] public class SkillSaveEntry { public int id; public int level; }
     [Serializable] public class StructEntry
     {
         public int kind, x, y, w, h, rot;
@@ -28,7 +28,7 @@ namespace Echo7
         public float hour;
         public int rank, rankPoints, reputation;
         public int skillPoints;
-        public List<SkillEntry> skills = new List<SkillEntry>();
+        public List<SkillSaveEntry> skills = new List<SkillSaveEntry>();
         public List<ResEntry> resources = new List<ResEntry>();
         public List<StructEntry> structures = new List<StructEntry>();
         public List<NpcEntry> npcs = new List<NpcEntry>();
@@ -116,7 +116,7 @@ namespace Echo7
                 prologueActive = Game.Tutorial != null && Game.Tutorial.Active,
                 prologueStep = Game.Tutorial != null ? Game.Tutorial.StepIndex : 0,
             };
-            foreach (var kv in Game.Skills.Snapshot()) d.skills.Add(new SkillEntry { id = (int)kv.Key, level = kv.Value });
+            foreach (var kv in Game.Skills.Snapshot()) d.skills.Add(new SkillSaveEntry { id = (int)kv.Key, level = kv.Value });
             foreach (var t in ResourceBank.All) d.resources.Add(new ResEntry { type = (int)t, amount = Game.Bank.Exact(t) });
             d.tasks.AddRange(Game.Tasks.Active);
             d.flags.AddRange(Game.Entry.Flags);

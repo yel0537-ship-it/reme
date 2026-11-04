@@ -14,7 +14,10 @@ namespace Echo7
         LandingPad, Spaceport, DecoyBeacon
     }
 
-    /// <summary>Описание типа постройки. Все цифры баланса — здесь.</summary>
+    /// <summary>
+    /// Описание типа постройки. Значения по умолчанию — в <see cref="BuildingCatalog.CodeDefaults"/>,
+    /// геймдизайнер переопределяет их в ассете <see cref="BuildingBalance"/> (Resources/Echo7Balance/Buildings).
+    /// </summary>
     public class BuildingDef
     {
         public StructureKind Kind;
@@ -64,12 +67,39 @@ namespace Echo7
             return _map[k];
         }
 
-        static Cost C(params (ResourceType, int)[] items) => new Cost(items);
-        const ResourceType Al = ResourceType.Alloys, Ti = ResourceType.Titanium, Cr = ResourceType.Crystals, Si = ResourceType.Silicon, Am = ResourceType.Ammo;
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() { _all = null; _map = null; }
 
         static void Build()
         {
-            _all = new List<BuildingDef>
+            var defs = CodeDefaults();
+            var map = new Dictionary<StructureKind, BuildingDef>();
+            foreach (var d in defs) map[d.Kind] = d;
+            _all = defs;
+            _map = map;
+            var asset = BalanceData.Load<BuildingBalance>(BuildingBalance.File);
+            if (asset != null) Apply(asset);
+        }
+
+        /// <summary>
+        /// Перенести значения ассета на описания. Объекты BuildingDef не пересоздаются, поэтому правка во время Play
+        /// сразу видна в меню (цены, время стройки, допуски) и в энергосети; прочность и броня — у новых построек.
+        /// </summary>
+        public static void Apply(BuildingBalance asset)
+        {
+            if (_map == null || asset == null) return;
+            foreach (var e in asset.buildings)
+                if (_map.TryGetValue(e.kind, out var d)) e.ApplyTo(d);
+            if (Application.isPlaying) Game.Power?.MarkDirty();
+        }
+
+        static Cost C(params (ResourceType, int)[] items) => new Cost(items);
+        const ResourceType Al = ResourceType.Alloys, Ti = ResourceType.Titanium, Cr = ResourceType.Crystals, Si = ResourceType.Silicon, Am = ResourceType.Ammo;
+
+        /// <summary>Значения из кода: запасной вариант без ассета и источник для генерации ассета.</summary>
+        public static List<BuildingDef> CodeDefaults()
+        {
+            return new List<BuildingDef>
             {
                 new BuildingDef { Kind = StructureKind.Reactor, Name = "Центральный реактор", Category = BuildCategory.Core,
                     Description = "Сердце аванпоста. Даёт энергию в радиусе. Если реактор уничтожен — аванпост потерян.",
@@ -178,8 +208,6 @@ namespace Echo7
                     Size = new Vector2Int(5, 5), Cost = C((Al, 110), (Ti, 40), (Cr, 18)), MaxHp = 2600f, FlatArmor = 8f, BuildTime = 40f, EnergyUse = 14f,
                     RequiredFeature = Feature.Spaceport, Height = 8f, Component = typeof(Spaceport), Model = StructureModels.Spaceport },
             };
-            _map = new Dictionary<StructureKind, BuildingDef>();
-            foreach (var d in _all) _map[d.Kind] = d;
         }
 
         public static string CategoryName(BuildCategory c)

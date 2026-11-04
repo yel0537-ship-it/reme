@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Echo7
 {
-    /// <summary>Параметры турели по типу.</summary>
+    /// <summary>Параметры турели по типу (баланс — в ассете TurretBalance).</summary>
     public class TurretProfile
     {
         public float Range = 22f;
@@ -22,7 +22,43 @@ namespace Echo7
         public Color Tracer = new Color(1f, 0.75f, 0.35f, 1f);
         public bool PreferHeavy;
 
+        /// <summary>Типы построек-турелей, у которых есть профиль.</summary>
+        public static readonly StructureKind[] TurretKinds = { StructureKind.MgTurret, StructureKind.LaserTurret, StructureKind.HeavyTurret };
+
+        static System.Collections.Generic.Dictionary<StructureKind, TurretProfile> _map;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => _map = null;
+
+        /// <summary>
+        /// Общий профиль для всех турелей этого типа. Значения — из ассета <see cref="TurretBalance"/>, без него — из кода.
+        /// Объект общий и не пересоздаётся, поэтому правка ассета во время Play сразу меняет стрельбу всех турелей.
+        /// </summary>
         public static TurretProfile For(StructureKind k)
+        {
+            if (_map == null)
+            {
+                _map = new System.Collections.Generic.Dictionary<StructureKind, TurretProfile>();
+                foreach (var t in TurretKinds) _map[t] = CodeDefault(t);
+                var asset = BalanceData.Load<TurretBalance>(TurretBalance.File);
+                if (asset != null) Apply(asset);
+            }
+            if (!_map.TryGetValue(k, out var p)) { p = CodeDefault(k); _map[k] = p; }
+            return p;
+        }
+
+        public static void Apply(TurretBalance asset)
+        {
+            if (_map == null || asset == null) return;
+            foreach (var e in asset.turrets)
+            {
+                if (!_map.TryGetValue(e.kind, out var p)) { p = CodeDefault(e.kind); _map[e.kind] = p; }
+                e.ApplyTo(p);
+            }
+        }
+
+        /// <summary>Значения из кода.</summary>
+        public static TurretProfile CodeDefault(StructureKind k)
         {
             switch (k)
             {

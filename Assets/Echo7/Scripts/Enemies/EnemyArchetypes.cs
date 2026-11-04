@@ -5,7 +5,10 @@ namespace Echo7
 {
     public enum EnemyKind { Grazer, Stalker, Swarmer, Jumper, Brute, Spitter, Tank, Synth }
 
-    /// <summary>Описание типа существа. Стоимость Cost — «цена» в бюджете волны у директора.</summary>
+    /// <summary>
+    /// Описание типа существа. Стоимость Cost — «цена» в бюджете волны у директора.
+    /// Значения по умолчанию — в <see cref="CodeDefaults"/>, переопределение — ассет <see cref="EnemyBalance"/>.
+    /// </summary>
     public class EnemyArchetype
     {
         public EnemyKind Kind;
@@ -40,10 +43,34 @@ namespace Echo7
 
         public static IEnumerable<EnemyArchetype> All { get { if (_map == null) Build(); return _map.Values; } }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => _map = null;
+
         static void Build()
         {
-            _map = new Dictionary<EnemyKind, EnemyArchetype>();
-            void Add(EnemyArchetype a) => _map[a.Kind] = a;
+            var map = new Dictionary<EnemyKind, EnemyArchetype>();
+            foreach (var a in CodeDefaults()) map[a.Kind] = a;
+            _map = map;
+            var asset = BalanceData.Load<EnemyBalance>(EnemyBalance.File);
+            if (asset != null) Apply(asset);
+        }
+
+        /// <summary>
+        /// Перенести значения ассета на архетипы. Объекты общие для всех существ этого типа, поэтому правка во время Play
+        /// сразу меняет скорость, урон, дальность и темп атаки; здоровье и броня — у новых существ.
+        /// </summary>
+        public static void Apply(EnemyBalance asset)
+        {
+            if (_map == null || asset == null) return;
+            foreach (var e in asset.enemies)
+                if (_map.TryGetValue(e.kind, out var a)) e.ApplyTo(a);
+        }
+
+        /// <summary>Значения из кода: запасной вариант без ассета и источник для генерации ассета.</summary>
+        public static List<EnemyArchetype> CodeDefaults()
+        {
+            var list = new List<EnemyArchetype>();
+            void Add(EnemyArchetype a) => list.Add(a);
             Add(new EnemyArchetype { Kind = EnemyKind.Grazer, Name = "Рогач-травоед", Description = "Пассивное стадное животное. Мясо — пайки.",
                 MaxHp = 130f, Speed = 3.2f, Damage = 18f, AttackInterval = 1.5f, AttackRange = 2.4f, Size = 1.8f, Fauna = true, Rations = 6, Aggro = 0f, AttackSound = Sfx.Roar });
             Add(new EnemyArchetype { Kind = EnemyKind.Stalker, Name = "Саванный охотник", Description = "Агрессивный хищник. Нападает на одиночек.",
@@ -63,6 +90,7 @@ namespace Echo7
             Add(new EnemyArchetype { Kind = EnemyKind.Synth, Name = "Синт-страж", Description = "Боевой автомат заброшенного завода ИИ. Пули почти не берут — нужны лазеры и взрывчатка.",
                 MaxHp = 220f, Armor = ArmorClass.Synthetic, FlatArmor = 5f, Speed = 4.2f, Damage = 14f, AttackInterval = 1.4f, AttackRange = 12f,
                 Size = 1.1f, Cost = 6, Ranged = true, Aggro = 12f, AttackSound = Sfx.Laser, RequiredFlag = "ai_factory_active" });
+            return list;
         }
     }
 }
